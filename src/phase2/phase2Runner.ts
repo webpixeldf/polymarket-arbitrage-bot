@@ -46,6 +46,7 @@ async function runScanCycle(simulate: boolean): Promise<void> {
       questionPT: analysis.questionPT,
       slug: market.slug,
       conditionId: market.conditionId,
+      eventSlug: market.eventSlug,
       category,
       marketProb: market.probability,
       aiProb: analysis.probability,
