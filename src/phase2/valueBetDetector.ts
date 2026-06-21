@@ -84,7 +84,7 @@ export function formatValueBetEmail(vb: ValueBet, simulate: boolean): { subject:
     `❌ Fatores negativos:`,
     ...vb.analysis.bearishFactors.map(f => `  • ${f}`),
     ``,
-    `🔗 Mercado: https://polymarket.com/event/${vb.market.slug}`,
+    `🔗 Buscar no Polymarket: https://polymarket.com/markets?search=${encodeURIComponent(vb.market.question.slice(0, 60))}`,
     ``,
     simulate ? '⚠️ MODO SIMULAÇÃO — nenhuma ordem foi executada.' : '✅ Alerta para operação manual.',
   ].join('\n');
