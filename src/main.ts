@@ -2,6 +2,8 @@ import { config } from './config';
 import { createClobClient, findActive15mMarket } from './api';
 import { runDumpHedgeCycle } from './dumpHedgeTrader';
 import { log } from './logger';
+import { startDashboard } from './dashboard';
+import { store } from './store';
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -51,6 +53,9 @@ async function runAssetMonitor(asset: string): Promise<void> {
 
 async function main(): Promise<void> {
   const mode = isSimulation ? 'SIMULATION' : 'PRODUCTION';
+  store.markets = config.markets;
+  store.simulate = isSimulation;
+  startDashboard();
   log('INFO', `Bot starting in ${mode} mode`, { markets: config.markets });
 
   if (isSimulation) {

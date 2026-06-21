@@ -3,6 +3,7 @@ import { buyShares, redeemWinnings } from './api';
 import { MarketMonitor } from './monitor';
 import { appendHistory } from './logger';
 import { notifyOpportunity } from './notifier';
+import { addTrade } from './store';
 import { config } from './config';
 import { LegState, GammaMarket } from './models';
 
@@ -19,7 +20,7 @@ export async function runDumpHedgeCycle(
   const tokenIds: string[] = JSON.parse(market.clobTokenIds);
   const [upTokenId, downTokenId] = tokenIds; // index 0 = Up, index 1 = Down
 
-  const monitor = new MarketMonitor([upTokenId, downTokenId]);
+  const monitor = new MarketMonitor([upTokenId, downTokenId], asset);
 
   const leg1: LegState = { filled: false, tokenId: '', entryPrice: null, orderId: null };
   const leg2: LegState = { filled: false, tokenId: '', entryPrice: null, orderId: null };
@@ -91,6 +92,19 @@ export async function runDumpHedgeCycle(
           combined: combinedCost,
           target: config.dumpHedgeSumTarget,
           mode,
+          timestamp: new Date().toISOString(),
+        });
+
+        addTrade({
+          asset,
+          leg: leg1.tokenId === upTokenId ? 'UP' : 'DOWN',
+          leg1Price: leg1.entryPrice!,
+          leg2Price: hedgeAsk,
+          combined: combinedCost,
+          target: config.dumpHedgeSumTarget,
+          profit: mode === 'hedge' ? parseFloat((1 - combinedCost).toFixed(4)) * config.dumpHedgeShares : 0,
+          mode,
+          simulate,
           timestamp: new Date().toISOString(),
         });
 

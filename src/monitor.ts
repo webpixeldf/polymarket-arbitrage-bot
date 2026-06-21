@@ -1,11 +1,16 @@
 import { getBestAsk } from './api';
 import { PriceSnapshot } from './models';
 import { config } from './config';
+import { updatePrice } from './store';
 
 export class MarketMonitor {
   private history: Record<string, PriceSnapshot[]> = {};
+  private upTokenId: string;
+  private asset: string;
 
-  constructor(tokenIds: string[]) {
+  constructor(tokenIds: string[], asset: string) {
+    this.upTokenId = tokenIds[0];
+    this.asset = asset;
     for (const id of tokenIds) {
       this.history[id] = [];
     }
@@ -15,9 +20,10 @@ export class MarketMonitor {
     const ask = await getBestAsk(tokenId);
     if (ask !== null) {
       this.history[tokenId].push({ timestamp: Date.now(), ask });
-      // Keep only last 30 minutes of history
       const cutoff = Date.now() - 30 * 60 * 1000;
       this.history[tokenId] = this.history[tokenId].filter(s => s.timestamp >= cutoff);
+      const side = tokenId === this.upTokenId ? 'up' : 'down';
+      updatePrice(this.asset, side, ask);
     }
     return ask;
   }
