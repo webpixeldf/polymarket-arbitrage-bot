@@ -21,6 +21,7 @@ export interface ValueBetEntry {
   question: string;
   questionPT: string;
   slug: string;
+  conditionId: string;
   category: string;
   marketProb: number;
   aiProb: number;
@@ -37,6 +38,7 @@ export interface AnalyzedMarketEntry {
   question: string;
   questionPT: string;
   slug: string;
+  conditionId: string;
   category: string;
   marketProb: number;
   aiProb: number;
@@ -91,6 +93,7 @@ export function addValueBet(vb: import('./phase2/valueBetDetector').ValueBet): v
     question: vb.market.question,
     questionPT: vb.analysis.questionPT,
     slug: vb.market.slug,
+    conditionId: vb.market.conditionId,
     category: vb.category,
     marketProb: vb.market.probability,
     aiProb: vb.analysis.probability,

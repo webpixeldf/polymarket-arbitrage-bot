@@ -104,7 +104,7 @@ function html(): string {
         ${bearish ? `<div class="factors-col"><div class="factors-title down">❌ Favorável ao NÃO</div><ul>${bearish}</ul></div>` : ''}
       </div>` : ''}
 
-      <a class="vb-link" href="https://polymarket.com/event/${vb.slug}" target="_blank">🔗 Ver no Polymarket</a>
+      <a class="vb-link" href="https://polymarket.com/markets?search=${encodeURIComponent(vb.question.slice(0,60))}" target="_blank">🔗 Buscar no Polymarket</a>
     </div>`;
       }).join('');
 
@@ -244,7 +244,7 @@ function html(): string {
         return `<tr>
           <td style="font-size:0.8rem">${categoryLabel(m.category)}</td>
           <td style="font-size:0.82rem;max-width:300px">
-            <a href="https://polymarket.com/event/${m.slug}" target="_blank" style="color:#e2e8f0;text-decoration:none" title="${m.question}">${m.questionPT || m.question}</a>
+            <a href="https://polymarket.com/markets?search=${encodeURIComponent(m.question.slice(0,60))}" target="_blank" style="color:#e2e8f0;text-decoration:none" title="${m.question}">${m.questionPT || m.question}</a>
           </td>
           <td class="muted">${m.marketProb.toFixed(1)}%</td>
           <td class="${m.aiProb > m.marketProb ? 'up' : m.aiProb < m.marketProb ? 'down' : 'muted'}">${m.aiProb.toFixed(1)}%</td>
