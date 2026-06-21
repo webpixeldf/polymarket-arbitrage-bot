@@ -4,7 +4,7 @@ import { Category } from './newsCollector';
 
 const MIN_EDGE = parseFloat(process.env.MIN_EDGE ?? '5');
 const MIN_CONFIDENCE = parseFloat(process.env.MIN_CONFIDENCE ?? '60');
-const MIN_LIQUIDITY = parseFloat(process.env.MIN_LIQUIDITY ?? '500');
+const MIN_LIQUIDITY = parseFloat(process.env.MIN_LIQUIDITY ?? '100');
 
 export interface ValueBet {
   market: EventMarket;
