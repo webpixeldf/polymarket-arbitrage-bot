@@ -1,3 +1,7 @@
+import * as dns from 'dns';
+// Force IPv4 DNS resolution — Railway blocks outbound IPv6 (Gmail SMTP, etc.)
+dns.setDefaultResultOrder('ipv4first');
+
 import { config } from './config';
 import { createClobClient, findActive15mMarket } from './api';
 import { runDumpHedgeCycle } from './dumpHedgeTrader';
