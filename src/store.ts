@@ -17,11 +17,25 @@ export interface TradeEntry {
   timestamp: string;
 }
 
+export interface ValueBetEntry {
+  question: string;
+  slug: string;
+  category: string;
+  marketProb: number;
+  aiProb: number;
+  edge: number;
+  recommendation: string;
+  confidence: number;
+  reasoning: string;
+  timestamp: string;
+}
+
 interface BotStore {
   startedAt: string;
   markets: string[];
   prices: Record<string, PriceEntry>;
   trades: TradeEntry[];
+  valueBets: ValueBetEntry[];
   totalProfit: number;
   simulate: boolean;
 }
@@ -31,6 +45,7 @@ export const store: BotStore = {
   markets: [],
   prices: {},
   trades: [],
+  valueBets: [],
   totalProfit: 0,
   simulate: true,
 };
@@ -49,4 +64,21 @@ export function addTrade(trade: TradeEntry): void {
   if (trade.mode === 'hedge') {
     store.totalProfit += trade.profit;
   }
+}
+
+export function addValueBet(vb: import('./phase2/valueBetDetector').ValueBet): void {
+  const entry: ValueBetEntry = {
+    question: vb.market.question,
+    slug: vb.market.slug,
+    category: vb.category,
+    marketProb: vb.market.probability,
+    aiProb: vb.analysis.probability,
+    edge: vb.edge,
+    recommendation: vb.recommendation,
+    confidence: vb.analysis.confidence,
+    reasoning: vb.analysis.reasoning,
+    timestamp: vb.timestamp,
+  };
+  store.valueBets.unshift(entry);
+  if (store.valueBets.length > 50) store.valueBets.pop();
 }

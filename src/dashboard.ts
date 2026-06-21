@@ -13,9 +13,20 @@ function formatPrice(p: number | null): string {
   return (p * 100).toFixed(1) + '%';
 }
 
+function categoryLabel(cat: string): string {
+  const map: Record<string, string> = {
+    worldcup: '⚽ Copa',
+    elections: '🗳️ Eleições',
+    climate: '🌪️ Clima',
+    general: '📊 Geral',
+  };
+  return map[cat] ?? cat;
+}
+
 function html(): string {
   const mode = store.simulate ? '🟡 SIMULAÇÃO' : '🟢 PRODUÇÃO';
   const trades = store.trades;
+  const valueBets = store.valueBets;
   const profit = store.totalProfit.toFixed(4);
 
   const priceRows = Object.entries(store.prices).map(([asset, p]) => `
@@ -23,9 +34,7 @@ function html(): string {
       <td><b>${asset.toUpperCase()}</b></td>
       <td class="up">${formatPrice(p.up)}</td>
       <td class="down">${formatPrice(p.down)}</td>
-      <td class="${p.up !== null && p.down !== null && (p.up + p.down) < store.prices[asset]?.up! + store.prices[asset]?.down! ? 'profit' : ''}">${
-        p.up !== null && p.down !== null ? ((p.up + p.down) * 100).toFixed(1) + '%' : '—'
-      }</td>
+      <td>${p.up !== null && p.down !== null ? ((p.up + p.down) * 100).toFixed(1) + '%' : '—'}</td>
       <td class="muted">${new Date(p.updatedAt).toLocaleTimeString('pt-BR')}</td>
     </tr>`).join('');
 
@@ -46,12 +55,26 @@ function html(): string {
       }</td>
     </tr>`).join('');
 
+  const valueBetRows = valueBets.length === 0
+    ? '<tr><td colspan="8" class="muted center">Aguardando próximo ciclo de análise (a cada 15 min)...</td></tr>'
+    : valueBets.map(vb => `
+    <tr>
+      <td class="muted">${new Date(vb.timestamp).toLocaleString('pt-BR')}</td>
+      <td>${categoryLabel(vb.category)}</td>
+      <td style="max-width:280px;font-size:0.82rem">${vb.question}</td>
+      <td class="muted">${vb.marketProb.toFixed(1)}%</td>
+      <td class="up">${vb.aiProb.toFixed(1)}%</td>
+      <td class="${vb.edge > 0 ? 'profit' : 'loss'}">${vb.edge > 0 ? '+' : ''}${vb.edge.toFixed(1)}%</td>
+      <td style="font-size:0.8rem;font-weight:600;color:${vb.recommendation === 'BUY_YES' ? '#4ade80' : '#f87171'}">${vb.recommendation === 'BUY_YES' ? 'COMPRAR SIM' : 'COMPRAR NÃO'}</td>
+      <td class="muted">${vb.confidence.toFixed(0)}%</td>
+    </tr>`).join('');
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="refresh" content="10">
+  <meta http-equiv="refresh" content="30">
   <title>Polymarket Bot</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -73,11 +96,13 @@ function html(): string {
     .center { text-align: center; padding: 24px; }
     h2 { font-size: 1rem; margin-bottom: 12px; color: #94a3b8; }
     .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: #1e2130; }
+    .section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .phase-badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; background: #2d3148; color: #94a3b8; }
   </style>
 </head>
 <body>
   <h1>Polymarket Arbitrage Bot</h1>
-  <p class="subtitle">Atualiza automaticamente a cada 10 segundos • Modo: <span class="badge">${mode}</span></p>
+  <p class="subtitle">Atualiza a cada 30 segundos • Modo: <span class="badge">${mode}</span></p>
 
   <div class="cards">
     <div class="card">
@@ -89,12 +114,12 @@ function html(): string {
       <div class="value">${uptime(store.startedAt)}</div>
     </div>
     <div class="card">
-      <div class="label">Operações</div>
-      <div class="value">${trades.length}</div>
+      <div class="label">Hedges (Fase 1)</div>
+      <div class="value" style="color:#4ade80">${trades.filter(t => t.mode === 'hedge').length}</div>
     </div>
     <div class="card">
-      <div class="label">Hedges lucrativos</div>
-      <div class="value" style="color:#4ade80">${trades.filter(t => t.mode === 'hedge').length}</div>
+      <div class="label">Value Bets (Fase 2)</div>
+      <div class="value" style="color:#f59e0b">${valueBets.length}</div>
     </div>
     <div class="card">
       <div class="label">Stop-losses</div>
@@ -106,16 +131,39 @@ function html(): string {
     </div>
   </div>
 
-  <h2>Preços em tempo real</h2>
+  <div class="section-header">
+    <h2>⚡ Fase 1 — Arbitragem BTC/ETH (15m)</h2>
+  </div>
+
   <table>
     <thead><tr><th>Ativo</th><th>UP</th><th>DOWN</th><th>Combinado</th><th>Atualizado</th></tr></thead>
     <tbody>${priceRows || '<tr><td colspan="5" class="muted center">Aguardando dados...</td></tr>'}</tbody>
   </table>
 
-  <h2>Histórico de operações</h2>
   <table>
     <thead><tr><th>Data/Hora</th><th>Ativo</th><th>Perna</th><th>Leg 1</th><th>Leg 2</th><th>Combinado</th><th>Resultado</th></tr></thead>
     <tbody>${tradeRows}</tbody>
+  </table>
+
+  <div class="section-header">
+    <h2>🤖 Fase 2 — Value Bets com IA (Copa, Eleições, Clima)</h2>
+    <span class="phase-badge">DeepSeek • atualiza a cada 15 min</span>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Data/Hora</th>
+        <th>Categoria</th>
+        <th>Pergunta</th>
+        <th>Mercado</th>
+        <th>IA (DeepSeek)</th>
+        <th>Edge</th>
+        <th>Recomendação</th>
+        <th>Confiança</th>
+      </tr>
+    </thead>
+    <tbody>${valueBetRows}</tbody>
   </table>
 </body>
 </html>`;
@@ -133,6 +181,7 @@ export function startDashboard(): void {
     markets: store.markets,
     prices: store.prices,
     trades: store.trades.slice(0, 10),
+    valueBets: store.valueBets.slice(0, 10),
     totalProfit: store.totalProfit,
   }));
 

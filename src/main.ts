@@ -4,6 +4,7 @@ import { runDumpHedgeCycle } from './dumpHedgeTrader';
 import { log } from './logger';
 import { startDashboard } from './dashboard';
 import { store } from './store';
+import { startPhase2 } from './phase2/phase2Runner';
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -69,7 +70,10 @@ async function main(): Promise<void> {
     console.error('='.repeat(60));
   }
 
-  await Promise.all(config.markets.map(asset => runAssetMonitor(asset)));
+  await Promise.all([
+    ...config.markets.map(asset => runAssetMonitor(asset)),
+    startPhase2(isSimulation),
+  ]);
 }
 
 main().catch(err => {
