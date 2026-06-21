@@ -30,6 +30,7 @@ export interface EventMarket {
   conditionId: string;
   question: string;
   slug: string;
+  eventSlug: string;   // parent event slug → polymarket.com/event/{eventSlug}
   endDate: string;
   liquidity: number;
   probability: number;    // 0-100
@@ -107,10 +108,14 @@ export async function scanEventMarkets(): Promise<EventMarket[]> {
         } catch { /* keep empty */ }
       }
 
+      // Get event slug for direct Polymarket URL
+      const eventSlug = m.events?.[0]?.slug ?? m.slug ?? '';
+
       results.push({
         conditionId: m.conditionId,
         question: m.question,
         slug: m.slug ?? '',
+        eventSlug,
         endDate: m.endDate ?? m.endDateIso ?? '',
         liquidity,
         probability,
