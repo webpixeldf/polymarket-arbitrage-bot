@@ -10,8 +10,8 @@ const enabled = !!(gmailUser && gmailPass);
 const transporter = enabled
   ? nodemailer.createTransport({
       host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
+      port: 587,
+      secure: false, // STARTTLS — port 465 blocked on Railway
       auth: { user: gmailUser, pass: gmailPass },
     })
   : null;
