@@ -5,6 +5,7 @@ import { log } from './logger';
 import { startDashboard } from './dashboard';
 import { store } from './store';
 import { startPhase2 } from './phase2/phase2Runner';
+import { sendStartupEmail } from './notifier';
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -69,6 +70,9 @@ async function main(): Promise<void> {
     console.error(`  Carteira: ${config.proxyWalletAddress}`);
     console.error('='.repeat(60));
   }
+
+  // Send startup email to confirm notifications are working
+  await sendStartupEmail(isSimulation);
 
   await Promise.all([
     ...config.markets.map(asset => runAssetMonitor(asset)),

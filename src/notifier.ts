@@ -1,20 +1,27 @@
 import * as nodemailer from 'nodemailer';
 
 const gmailUser = process.env.GMAIL_USER ?? '';
-const gmailPass = process.env.GMAIL_APP_PASSWORD ?? '';
+// Remove spaces from app password (Google shows with spaces but SMTP needs without)
+const gmailPass = (process.env.GMAIL_APP_PASSWORD ?? '').replace(/\s/g, '');
 const gmailTo   = process.env.GMAIL_TO ?? gmailUser;
 
 const enabled = !!(gmailUser && gmailPass);
 
 const transporter = enabled
   ? nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
       auth: { user: gmailUser, pass: gmailPass },
     })
   : null;
 
 export async function notify(subject: string, body: string): Promise<void> {
-  if (!enabled || !transporter) return;
+  if (!enabled || !transporter) {
+    console.error('[EMAIL] Desativado — GMAIL_USER ou GMAIL_APP_PASSWORD não configurados.');
+    return;
+  }
+  console.error(`[EMAIL] Enviando para ${gmailTo}: ${subject.slice(0, 60)}`);
   try {
     await transporter.sendMail({
       from: `"Polymarket Bot" <${gmailUser}>`,
@@ -22,10 +29,18 @@ export async function notify(subject: string, body: string): Promise<void> {
       subject,
       text: body,
     });
-    console.error(`[EMAIL] Enviado: ${subject}`);
+    console.error(`[EMAIL] ✅ Enviado com sucesso!`);
   } catch (err) {
-    console.error(`[EMAIL] Falha ao enviar:`, (err as Error).message);
+    console.error(`[EMAIL] ❌ Falha:`, (err as Error).message);
   }
+}
+
+export async function sendStartupEmail(simulate: boolean): Promise<void> {
+  const mode = simulate ? 'SIMULAÇÃO' : 'PRODUÇÃO';
+  await notify(
+    `[Polymarket Bot] Iniciado em modo ${mode}`,
+    `O bot Polymarket foi iniciado com sucesso.\n\nModo: ${mode}\nHorário: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n\nFase 1: Arbitragem BTC/ETH\nFase 2: Value Bets com IA (Copa, Eleições, Clima)\n\nVocê receberá alertas quando oportunidades forem detectadas.`
+  );
 }
 
 export async function notifyOpportunity(params: {

@@ -126,9 +126,10 @@ export function detectCategory(question: string): Category {
       q.includes('mlb') || q.includes('formula') || q.includes('tennis') ||
       q.includes('basketball') || q.includes('baseball') || q.includes('ufc')) return 'sports';
 
-  if (q.includes('ai') || q.includes('openai') || q.includes('apple') ||
+  if (/\bai\b/.test(q) || q.includes('openai') || q.includes('apple') ||
       q.includes('google') || q.includes('microsoft') || q.includes('technology') ||
-      q.includes('elon') || q.includes('meta') || q.includes('model')) return 'tech';
+      q.includes('elon') || /\bmeta\b/.test(q) || q.includes('chatgpt') ||
+      q.includes('deepseek') || q.includes('gemini')) return 'tech';
 
   return 'general';
 }
