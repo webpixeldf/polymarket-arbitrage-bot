@@ -24,9 +24,9 @@ async function runScanCycle(simulate: boolean): Promise<void> {
     if (alreadyAlerted.has(market.conditionId)) continue;
 
     const daysToEnd = (new Date(market.endDate).getTime() - Date.now()) / 86400000;
-    if (daysToEnd > 90 || daysToEnd < 0) { skippedDate++; continue; }
+    if (daysToEnd > 180 || daysToEnd < 0) { skippedDate++; continue; }
 
-    if (market.probability > 92 || market.probability < 8) { skippedProb++; continue; }
+    if (market.probability > 95 || market.probability < 5) { skippedProb++; continue; }
 
     analyzed++;
     const category = detectCategory(market.question);

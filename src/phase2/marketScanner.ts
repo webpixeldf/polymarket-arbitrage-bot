@@ -3,24 +3,28 @@ import { Category, detectCategory } from './newsCollector';
 
 const GAMMA_API = process.env.GAMMA_API_URL ?? 'https://gamma-api.polymarket.com';
 
-const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  worldcup: ['world cup', 'fifa', 'copa', 'soccer', 'football', 'goal', 'match', 'tournament',
-             'semifinal', 'final', 'champion', 'brazil', 'argentina', 'france', 'england',
-             'germany', 'spain', 'portugal', 'group stage', 'knockout'],
-  elections: ['election', 'president', 'vote', 'poll', 'senator', 'governor', 'primary',
-              'ballot', 'candidate', 'party', 'democrat', 'republican', 'congress', 'parliament'],
-  climate: ['hurricane', 'storm', 'temperature', 'weather', 'flood', 'drought', 'wildfire',
-            'tornado', 'earthquake', 'rainfall', 'snow', 'record heat', 'el nino'],
-  politics: ['trump', 'congress', 'senate', 'white house', 'supreme court', 'legislation',
-             'republican', 'democrat', 'impeach', 'veto', 'executive order'],
-  finance: ['fed', 'interest rate', 'inflation', 'gdp', 'recession', 'stock', 'dow',
-            'nasdaq', 'economy', 'treasury', 'tariff', 'market crash'],
-  geopolitics: ['iran', 'russia', 'ukraine', 'china', 'taiwan', 'nato', 'war', 'sanction',
-                'missile', 'nuclear', 'north korea', 'middle east', 'ceasefire'],
-  sports: ['nfl', 'nba', 'nhl', 'mlb', 'formula', 'tennis', 'basketball', 'baseball', 'ufc'],
-  tech: ['ai', 'openai', 'apple', 'google', 'microsoft', 'technology', 'elon', 'meta', 'model'],
-  general: [],
-};
+// All keywords that identify markets we want to analyze
+const ALL_KEYWORDS = [
+  // World Cup — match specific (less efficient = more edge)
+  'world cup', 'fifa', 'copa do mundo', 'copa mundial',
+  'will brazil', 'will argentina', 'will france', 'will england',
+  'will germany', 'will spain', 'will portugal', 'will netherlands',
+  'will morocco', 'will usa', 'will mexico', 'will japan', 'will colombia',
+  'advance to', 'reach the', 'group stage', 'knockout', 'round of 16',
+  'quarterfinal', 'semifinal', 'world cup final', 'score in', 'goals in',
+  // Elections
+  'election', 'president', 'senator', 'governor', 'primary', 'ballot',
+  'candidate', 'democrat', 'republican', 'congress', 'parliament', 'eleic',
+  // Climate
+  'hurricane', 'tropical storm', 'flood', 'drought', 'wildfire', 'tornado',
+  'earthquake', 'el nino', 'record heat', 'record temperature',
+  // Politics
+  'trump', 'senate', 'supreme court', 'impeach', 'executive order',
+  // Geopolitics
+  'iran', 'russia', 'ukraine', 'taiwan', 'ceasefire', 'nuclear',
+  // Finance
+  'interest rate', 'federal reserve', 'inflation', 'recession', 'fed rate',
+];
 
 export interface EventMarket {
   conditionId: string;
@@ -28,55 +32,67 @@ export interface EventMarket {
   slug: string;
   endDate: string;
   liquidity: number;
-  probability: number;    // current market probability (0-100)
+  probability: number;    // 0-100
   category: Category;
   volume: number;
 }
 
-export async function scanEventMarkets(): Promise<EventMarket[]> {
+async function fetchPage(offset: number, orderBy: string): Promise<any[]> {
   try {
     const resp = await axios.get(`${GAMMA_API}/markets`, {
-      params: {
-        active: true,
-        limit: 500,
-        order: 'liquidityNum',
-        ascending: false,
-      },
+      params: { active: true, limit: 100, offset, order: orderBy, ascending: false },
       timeout: 15000,
     });
+    return Array.isArray(resp.data) ? resp.data : [];
+  } catch {
+    return [];
+  }
+}
 
-    const markets = resp.data as any[];
+export async function scanEventMarkets(): Promise<EventMarket[]> {
+  try {
+    // Fetch top 300 by liquidity + top 100 by volume for diversity
+    const [page1, page2, page3, byVolume] = await Promise.all([
+      fetchPage(0, 'liquidityNum'),
+      fetchPage(100, 'liquidityNum'),
+      fetchPage(200, 'liquidityNum'),
+      fetchPage(0, 'volume'),
+    ]);
+
+    const allRaw = [...page1, ...page2, ...page3, ...byVolume];
+
+    // Deduplicate by conditionId
+    const seen = new Set<string>();
+    const unique = allRaw.filter(m => {
+      if (!m.conditionId || seen.has(m.conditionId)) return false;
+      seen.add(m.conditionId);
+      return true;
+    });
+
     const results: EventMarket[] = [];
 
-    for (const m of markets) {
-      if (!m.question || !m.conditionId || !m.outcomePrices) continue;
+    for (const m of unique) {
+      if (!m.question || !m.conditionId) continue;
 
-      // Skip crypto 15m markets (handled by Phase 1)
+      // Skip crypto 15m markets (Phase 1 handles these)
       if (m.slug && (m.slug.includes('updown') || m.slug.includes('15m') || m.slug.includes('5m'))) continue;
 
-      // Skip markets with less than $1000 liquidity
+      // Minimum liquidity $500 (lowered from $1000 to catch match markets)
       const liquidity = parseFloat(m.liquidityNum ?? m.liquidity ?? '0');
-      if (liquidity < 1000) continue;
+      if (liquidity < 500) continue;
 
-      // Detect category
-      const category = detectCategory(m.question);
-
-      // Only include markets matching our target categories
-      const keywords = [
-        ...CATEGORY_KEYWORDS.worldcup,
-        ...CATEGORY_KEYWORDS.elections,
-        ...CATEGORY_KEYWORDS.climate,
-      ];
+      // Must match at least one keyword
       const q = m.question.toLowerCase();
-      const matches = keywords.some(kw => q.includes(kw));
-      if (!matches && category === 'general') continue;
+      if (!ALL_KEYWORDS.some(kw => q.includes(kw))) continue;
 
-      // Parse probability from outcomePrices (first outcome = YES)
+      // Parse probability from outcomePrices
       let probability = 50;
-      try {
-        const prices = JSON.parse(m.outcomePrices);
-        probability = parseFloat(prices[0]) * 100;
-      } catch { /* skip */ }
+      if (m.outcomePrices) {
+        try {
+          const prices = JSON.parse(m.outcomePrices);
+          probability = parseFloat(prices[0]) * 100;
+        } catch { /* keep 50 */ }
+      }
 
       results.push({
         conditionId: m.conditionId,
@@ -85,14 +101,15 @@ export async function scanEventMarkets(): Promise<EventMarket[]> {
         endDate: m.endDate ?? m.endDateIso ?? '',
         liquidity,
         probability,
-        category,
+        category: detectCategory(m.question),
         volume: parseFloat(m.volume ?? '0'),
       });
     }
 
-    return results;
+    // Sort by liquidity descending
+    return results.sort((a, b) => b.liquidity - a.liquidity);
   } catch (err) {
-    console.error('[Scanner] Failed to scan markets:', (err as Error).message);
+    console.error('[Scanner] Failed:', (err as Error).message);
     return [];
   }
 }

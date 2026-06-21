@@ -2,9 +2,9 @@ import { EventMarket } from './marketScanner';
 import { AIAnalysis } from './aiAnalyzer';
 import { Category } from './newsCollector';
 
-const MIN_EDGE = parseFloat(process.env.MIN_EDGE ?? '8');
-const MIN_CONFIDENCE = parseFloat(process.env.MIN_CONFIDENCE ?? '70');
-const MIN_LIQUIDITY = parseFloat(process.env.MIN_LIQUIDITY ?? '1000');
+const MIN_EDGE = parseFloat(process.env.MIN_EDGE ?? '5');
+const MIN_CONFIDENCE = parseFloat(process.env.MIN_CONFIDENCE ?? '60');
+const MIN_LIQUIDITY = parseFloat(process.env.MIN_LIQUIDITY ?? '500');
 
 export interface ValueBet {
   market: EventMarket;
