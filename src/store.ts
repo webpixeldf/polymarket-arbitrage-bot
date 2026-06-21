@@ -19,6 +19,7 @@ export interface TradeEntry {
 
 export interface ValueBetEntry {
   question: string;
+  questionPT: string;
   slug: string;
   category: string;
   marketProb: number;
@@ -27,6 +28,8 @@ export interface ValueBetEntry {
   recommendation: string;
   confidence: number;
   reasoning: string;
+  bullishFactors: string[];
+  bearishFactors: string[];
   timestamp: string;
 }
 
@@ -69,6 +72,7 @@ export function addTrade(trade: TradeEntry): void {
 export function addValueBet(vb: import('./phase2/valueBetDetector').ValueBet): void {
   const entry: ValueBetEntry = {
     question: vb.market.question,
+    questionPT: vb.analysis.questionPT,
     slug: vb.market.slug,
     category: vb.category,
     marketProb: vb.market.probability,
@@ -77,6 +81,8 @@ export function addValueBet(vb: import('./phase2/valueBetDetector').ValueBet): v
     recommendation: vb.recommendation,
     confidence: vb.analysis.confidence,
     reasoning: vb.analysis.reasoning,
+    bullishFactors: vb.analysis.bullishFactors,
+    bearishFactors: vb.analysis.bearishFactors,
     timestamp: vb.timestamp,
   };
   store.valueBets.unshift(entry);

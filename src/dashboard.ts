@@ -15,9 +15,14 @@ function formatPrice(p: number | null): string {
 
 function categoryLabel(cat: string): string {
   const map: Record<string, string> = {
-    worldcup: '⚽ Copa',
+    worldcup: '⚽ Copa do Mundo',
     elections: '🗳️ Eleições',
     climate: '🌪️ Clima',
+    politics: '🏛️ Política',
+    finance: '💹 Finanças',
+    geopolitics: '🌍 Geopolítica',
+    sports: '🏆 Esportes',
+    tech: '🤖 Tecnologia',
     general: '📊 Geral',
   };
   return map[cat] ?? cat;
@@ -49,25 +54,59 @@ function html(): string {
       <td>${(t.leg2Price * 100).toFixed(1)}%</td>
       <td>${(t.combined * 100).toFixed(1)}%</td>
       <td class="${t.mode === 'hedge' ? 'profit' : 'loss'}">${
-        t.mode === 'hedge'
-          ? `+${((1 - t.combined) * 100).toFixed(2)}%`
-          : 'Stop-loss'
+        t.mode === 'hedge' ? `+${((1 - t.combined) * 100).toFixed(2)}%` : 'Stop-loss'
       }</td>
     </tr>`).join('');
 
-  const valueBetRows = valueBets.length === 0
-    ? '<tr><td colspan="8" class="muted center">Aguardando próximo ciclo de análise (a cada 15 min)...</td></tr>'
-    : valueBets.map(vb => `
-    <tr>
-      <td class="muted">${new Date(vb.timestamp).toLocaleString('pt-BR')}</td>
-      <td>${categoryLabel(vb.category)}</td>
-      <td style="max-width:280px;font-size:0.82rem">${vb.question}</td>
-      <td class="muted">${vb.marketProb.toFixed(1)}%</td>
-      <td class="up">${vb.aiProb.toFixed(1)}%</td>
-      <td class="${vb.edge > 0 ? 'profit' : 'loss'}">${vb.edge > 0 ? '+' : ''}${vb.edge.toFixed(1)}%</td>
-      <td style="font-size:0.8rem;font-weight:600;color:${vb.recommendation === 'BUY_YES' ? '#4ade80' : '#f87171'}">${vb.recommendation === 'BUY_YES' ? 'COMPRAR SIM' : 'COMPRAR NÃO'}</td>
-      <td class="muted">${vb.confidence.toFixed(0)}%</td>
-    </tr>`).join('');
+  const valueBetCards = valueBets.length === 0
+    ? `<div class="empty-state">⏳ Aguardando próximo ciclo de análise (a cada 15 min)...<br><span class="muted" style="font-size:0.8rem">O DeepSeek analisa mercados de Copa do Mundo, Eleições, Clima, Política e Geopolítica</span></div>`
+    : valueBets.map(vb => {
+        const edgeColor = vb.edge > 0 ? '#4ade80' : '#f87171';
+        const recColor = vb.recommendation === 'BUY_YES' ? '#4ade80' : '#f87171';
+        const recLabel = vb.recommendation === 'BUY_YES' ? '✅ COMPRAR SIM (YES)' : '❌ COMPRAR NÃO (NO)';
+        const bullish = (vb.bullishFactors ?? []).map(f => `<li>${f}</li>`).join('');
+        const bearish = (vb.bearishFactors ?? []).map(f => `<li>${f}</li>`).join('');
+        return `
+    <div class="vb-card">
+      <div class="vb-header">
+        <span class="cat-badge">${categoryLabel(vb.category)}</span>
+        <span class="vb-time muted">${new Date(vb.timestamp).toLocaleString('pt-BR')}</span>
+      </div>
+      <div class="vb-question">${vb.questionPT || vb.question}</div>
+      <div class="vb-question-en muted">${vb.question}</div>
+
+      <div class="vb-stats">
+        <div class="vb-stat">
+          <div class="vb-stat-label">Mercado diz</div>
+          <div class="vb-stat-value muted">${vb.marketProb.toFixed(1)}%</div>
+        </div>
+        <div class="vb-stat">
+          <div class="vb-stat-label">IA diz</div>
+          <div class="vb-stat-value up">${vb.aiProb.toFixed(1)}%</div>
+        </div>
+        <div class="vb-stat">
+          <div class="vb-stat-label">Vantagem (Edge)</div>
+          <div class="vb-stat-value" style="color:${edgeColor}">${vb.edge > 0 ? '+' : ''}${vb.edge.toFixed(1)}%</div>
+        </div>
+        <div class="vb-stat">
+          <div class="vb-stat-label">Confiança da IA</div>
+          <div class="vb-stat-value">${vb.confidence.toFixed(0)}%</div>
+        </div>
+      </div>
+
+      <div class="vb-rec" style="color:${recColor}">${recLabel}</div>
+
+      <div class="vb-reasoning">${vb.reasoning}</div>
+
+      ${bullish || bearish ? `
+      <div class="vb-factors">
+        ${bullish ? `<div class="factors-col"><div class="factors-title up">✅ Favorável ao SIM</div><ul>${bullish}</ul></div>` : ''}
+        ${bearish ? `<div class="factors-col"><div class="factors-title down">❌ Favorável ao NÃO</div><ul>${bearish}</ul></div>` : ''}
+      </div>` : ''}
+
+      <a class="vb-link" href="https://polymarket.com/event/${vb.slug}" target="_blank">🔗 Ver no Polymarket</a>
+    </div>`;
+      }).join('');
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -96,12 +135,34 @@ function html(): string {
     .center { text-align: center; padding: 24px; }
     h2 { font-size: 1rem; margin-bottom: 12px; color: #94a3b8; }
     .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; background: #1e2130; }
-    .section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
     .phase-badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; background: #2d3148; color: #94a3b8; }
+    .empty-state { background: #1e2130; border-radius: 10px; padding: 32px; text-align: center; color: #64748b; margin-bottom: 28px; line-height: 2; }
+
+    /* Value Bet Cards */
+    .vb-card { background: #1e2130; border-radius: 12px; padding: 20px; margin-bottom: 16px; border-left: 3px solid #f59e0b; }
+    .vb-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .cat-badge { font-size: 0.8rem; padding: 3px 10px; background: #2d3148; border-radius: 20px; }
+    .vb-time { font-size: 0.78rem; }
+    .vb-question { font-size: 1.05rem; font-weight: 600; margin-bottom: 4px; line-height: 1.4; }
+    .vb-question-en { font-size: 0.78rem; margin-bottom: 14px; font-style: italic; }
+    .vb-stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+    .vb-stat { background: #161824; border-radius: 8px; padding: 10px 16px; min-width: 100px; }
+    .vb-stat-label { font-size: 0.7rem; color: #64748b; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+    .vb-stat-value { font-size: 1.3rem; font-weight: 700; }
+    .vb-rec { font-size: 1rem; font-weight: 700; margin-bottom: 10px; padding: 8px 14px; background: #161824; border-radius: 8px; display: inline-block; }
+    .vb-reasoning { font-size: 0.88rem; color: #cbd5e1; line-height: 1.6; margin: 10px 0; padding: 12px; background: #161824; border-radius: 8px; }
+    .vb-factors { display: flex; gap: 16px; margin-top: 12px; flex-wrap: wrap; }
+    .factors-col { flex: 1; min-width: 200px; }
+    .factors-title { font-size: 0.78rem; font-weight: 600; margin-bottom: 6px; }
+    .factors-col ul { list-style: none; }
+    .factors-col ul li { font-size: 0.82rem; color: #94a3b8; padding: 3px 0; padding-left: 8px; border-left: 2px solid #2d3148; margin-bottom: 4px; }
+    .vb-link { display: inline-block; margin-top: 14px; font-size: 0.82rem; color: #6366f1; text-decoration: none; }
+    .vb-link:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
-  <h1>Polymarket Arbitrage Bot</h1>
+  <h1>🤖 Polymarket Arbitrage Bot</h1>
   <p class="subtitle">Atualiza a cada 30 segundos • Modo: <span class="badge">${mode}</span></p>
 
   <div class="cards">
@@ -110,7 +171,7 @@ function html(): string {
       <div class="value" style="color:#4ade80">● Online</div>
     </div>
     <div class="card">
-      <div class="label">Uptime</div>
+      <div class="label">Tempo online</div>
       <div class="value">${uptime(store.startedAt)}</div>
     </div>
     <div class="card">
@@ -132,11 +193,11 @@ function html(): string {
   </div>
 
   <div class="section-header">
-    <h2>⚡ Fase 1 — Arbitragem BTC/ETH (15m)</h2>
+    <h2>⚡ Fase 1 — Arbitragem BTC/ETH (15 minutos)</h2>
   </div>
 
   <table>
-    <thead><tr><th>Ativo</th><th>UP</th><th>DOWN</th><th>Combinado</th><th>Atualizado</th></tr></thead>
+    <thead><tr><th>Ativo</th><th>Subida</th><th>Queda</th><th>Combinado</th><th>Atualizado</th></tr></thead>
     <tbody>${priceRows || '<tr><td colspan="5" class="muted center">Aguardando dados...</td></tr>'}</tbody>
   </table>
 
@@ -146,25 +207,12 @@ function html(): string {
   </table>
 
   <div class="section-header">
-    <h2>🤖 Fase 2 — Value Bets com IA (Copa, Eleições, Clima)</h2>
-    <span class="phase-badge">DeepSeek • atualiza a cada 15 min</span>
+    <h2>🤖 Fase 2 — Apostas de Valor com IA</h2>
+    <span class="phase-badge">DeepSeek • Copa, Eleições, Clima, Política • atualiza a cada 15 min</span>
   </div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Data/Hora</th>
-        <th>Categoria</th>
-        <th>Pergunta</th>
-        <th>Mercado</th>
-        <th>IA (DeepSeek)</th>
-        <th>Edge</th>
-        <th>Recomendação</th>
-        <th>Confiança</th>
-      </tr>
-    </thead>
-    <tbody>${valueBetRows}</tbody>
-  </table>
+  ${valueBetCards}
+
 </body>
 </html>`;
 }

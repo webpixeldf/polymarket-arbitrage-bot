@@ -7,9 +7,10 @@ const client = new OpenAI({
 });
 
 export interface AIAnalysis {
-  probability: number;   // 0-100
-  confidence: number;    // 0-100
+  probability: number;
+  confidence: number;
   reasoning: string;
+  questionPT: string;
   bullishFactors: string[];
   bearishFactors: string[];
 }
@@ -27,7 +28,7 @@ export async function analyzeMarket(
 
   const prompt = `Você é um analista quantitativo especializado em mercados de previsão.
 
-PERGUNTA DO MERCADO: "${question}"
+PERGUNTA DO MERCADO (em inglês): "${question}"
 PROBABILIDADE ATUAL NO MERCADO: ${marketProbability.toFixed(1)}%
 
 NOTÍCIAS RECENTES RELEVANTES:
@@ -35,13 +36,14 @@ ${newsText}
 
 Com base nas notícias e no seu conhecimento, estime a probabilidade REAL de que essa pergunta resolva como "SIM" (YES).
 
-Responda APENAS com um JSON válido neste formato exato:
+Responda APENAS com um JSON válido neste formato exato (tudo em português):
 {
+  "questionPT": "<tradução da pergunta para português>",
   "probability": <número de 0 a 100>,
   "confidence": <sua confiança na estimativa, de 0 a 100>,
-  "reasoning": "<explicação em 2-3 frases>",
-  "bullishFactors": ["<fator favorável ao YES>", "..."],
-  "bearishFactors": ["<fator favorável ao NO>", "..."]
+  "reasoning": "<explicação em 2-3 frases em português>",
+  "bullishFactors": ["<fator favorável ao SIM>", "..."],
+  "bearishFactors": ["<fator favorável ao NÃO>", "..."]
 }`;
 
   try {
@@ -50,16 +52,15 @@ Responda APENAS com um JSON válido neste formato exato:
       messages: [
         {
           role: 'system',
-          content: 'You are a quantitative analyst for prediction markets. Always respond with valid JSON only, no markdown, no explanation outside the JSON.',
+          content: 'Você é um analista quantitativo de mercados de previsão. Responda APENAS com JSON válido, sem markdown, sem texto fora do JSON. Todos os campos de texto devem estar em português.',
         },
         { role: 'user', content: prompt },
       ],
-      max_tokens: 600,
+      max_tokens: 700,
       temperature: 0.3,
     });
 
     const raw = response.choices[0]?.message?.content ?? '';
-    // Strip markdown code fences if present
     const clean = raw.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
     const jsonMatch = clean.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
@@ -68,7 +69,8 @@ Responda APENAS com um JSON válido neste formato exato:
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
-    const result = {
+    const result: AIAnalysis = {
+      questionPT: String(parsed.questionPT ?? question),
       probability: Math.max(0, Math.min(100, Number(parsed.probability))),
       confidence: Math.max(0, Math.min(100, Number(parsed.confidence))),
       reasoning: String(parsed.reasoning ?? ''),
