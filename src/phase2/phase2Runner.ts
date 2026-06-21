@@ -67,8 +67,8 @@ async function runScanCycle(simulate: boolean): Promise<void> {
 
     console.error(`[Phase2] VALUE BET: ${market.question.slice(0, 60)} | Edge: ${valueBet.edge.toFixed(1)}%`);
 
-    // Auto-execute order if ENABLE_PHASE2_ORDERS=true
-    const execution = await executeValueBet(valueBet, simulate);
+    // Auto-execute order if ENABLE_PHASE2_ORDERS=true (independent of global simulate flag)
+    const execution = await executeValueBet(valueBet);
     if (execution) {
       addOrder({
         question: market.question,

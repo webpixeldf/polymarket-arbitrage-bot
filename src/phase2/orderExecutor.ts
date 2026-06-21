@@ -16,7 +16,7 @@ export interface ExecutionResult {
   error?: string;
 }
 
-export async function executeValueBet(vb: ValueBet, simulate: boolean): Promise<ExecutionResult | null> {
+export async function executeValueBet(vb: ValueBet): Promise<ExecutionResult | null> {
   if (!ORDERS_ENABLED) {
     console.error('[Executor] ENABLE_PHASE2_ORDERS not set — skipping real order.');
     return null;
@@ -61,9 +61,10 @@ export async function executeValueBet(vb: ValueBet, simulate: boolean): Promise<
 
   const client = createClobClient();
 
-  console.error(`[Executor] ${simulate ? '[SIM]' : '[REAL]'} BUY ${side} — $${MAX_BET_USDC} @ ${(currentPrice * 100).toFixed(1)}¢ — ${vb.market.question.slice(0, 50)}`);
+  console.error(`[Executor] [REAL] BUY ${side} — $${MAX_BET_USDC} @ ${(currentPrice * 100).toFixed(1)}¢ — ${vb.market.question.slice(0, 50)}`);
 
-  const orderId = await buyShares(client, tokenId, currentPrice, MAX_BET_USDC, simulate);
+  // ENABLE_PHASE2_ORDERS=true overrides global simulation mode — always place real orders
+  const orderId = await buyShares(client, tokenId, currentPrice, MAX_BET_USDC, false);
 
   return {
     orderId,
