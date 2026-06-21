@@ -1,26 +1,42 @@
 import * as nodemailer from 'nodemailer';
+import axios from 'axios';
 
+// ── Telegram ──────────────────────────────────────────────────────────────────
+const tgToken  = process.env.TELEGRAM_BOT_TOKEN ?? '';
+const tgChatId = process.env.TELEGRAM_CHAT_ID ?? '';
+const tgEnabled = !!(tgToken && tgChatId);
+
+async function sendTelegram(text: string): Promise<void> {
+  if (!tgEnabled) return;
+  try {
+    await axios.post(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+      chat_id: tgChatId,
+      text,
+      parse_mode: 'HTML',
+    }, { timeout: 10000 });
+    console.error('[TELEGRAM] ✅ Mensagem enviada!');
+  } catch (err) {
+    console.error('[TELEGRAM] ❌ Falha:', (err as Error).message);
+  }
+}
+
+// ── Gmail (fallback) ──────────────────────────────────────────────────────────
 const gmailUser = process.env.GMAIL_USER ?? '';
-// Remove spaces from app password (Google shows with spaces but SMTP needs without)
 const gmailPass = (process.env.GMAIL_APP_PASSWORD ?? '').replace(/\s/g, '');
 const gmailTo   = process.env.GMAIL_TO ?? gmailUser;
+const emailEnabled = !!(gmailUser && gmailPass);
 
-const enabled = !!(gmailUser && gmailPass);
-
-const transporter = enabled
+const transporter = emailEnabled
   ? nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
-      secure: false, // STARTTLS — port 465 blocked on Railway
+      secure: false,
       auth: { user: gmailUser, pass: gmailPass },
     })
   : null;
 
-export async function notify(subject: string, body: string): Promise<void> {
-  if (!enabled || !transporter) {
-    console.error('[EMAIL] Desativado — GMAIL_USER ou GMAIL_APP_PASSWORD não configurados.');
-    return;
-  }
+async function sendEmail(subject: string, body: string): Promise<void> {
+  if (!emailEnabled || !transporter) return;
   console.error(`[EMAIL] Enviando para ${gmailTo}: ${subject.slice(0, 60)}`);
   try {
     await transporter.sendMail({
@@ -29,17 +45,27 @@ export async function notify(subject: string, body: string): Promise<void> {
       subject,
       text: body,
     });
-    console.error(`[EMAIL] ✅ Enviado com sucesso!`);
+    console.error('[EMAIL] ✅ Enviado!');
   } catch (err) {
-    console.error(`[EMAIL] ❌ Falha:`, (err as Error).message);
+    console.error('[EMAIL] ❌ Falha:', (err as Error).message);
   }
+}
+
+// ── Unified notify ────────────────────────────────────────────────────────────
+export async function notify(subject: string, body: string): Promise<void> {
+  // Telegram: short summary (4096 char limit)
+  const tgMsg = `<b>${subject}</b>\n\n${body.slice(0, 3800)}`;
+  await sendTelegram(tgMsg);
+  // Email: full body (parallel, ignore if SMTP blocked)
+  await sendEmail(subject, body);
 }
 
 export async function sendStartupEmail(simulate: boolean): Promise<void> {
   const mode = simulate ? 'SIMULAÇÃO' : 'PRODUÇÃO';
+  const hora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   await notify(
-    `[Polymarket Bot] Iniciado em modo ${mode}`,
-    `O bot Polymarket foi iniciado com sucesso.\n\nModo: ${mode}\nHorário: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n\nFase 1: Arbitragem BTC/ETH\nFase 2: Value Bets com IA (Copa, Eleições, Clima)\n\nVocê receberá alertas quando oportunidades forem detectadas.`
+    `🤖 Polymarket Bot iniciado — ${mode}`,
+    `Bot iniciado com sucesso!\n\nModo: ${mode}\nHorário: ${hora}\n\nFase 2: Value Bets com IA ativos.\nVocê receberá alertas quando oportunidades forem detectadas.`
   );
 }
 
