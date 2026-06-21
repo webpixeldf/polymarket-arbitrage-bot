@@ -61,8 +61,15 @@ async function getAuthenticatedClient(): Promise<ClobClient | null> {
   }
 }
 
+// Set to true after first 403 geo-block — avoids repeated failed attempts
+let geoBlocked = false;
+
 export async function executeValueBet(vb: ValueBet): Promise<ExecutionResult | null> {
   if (!ORDERS_ENABLED) return null;
+  if (geoBlocked) {
+    console.error('[Executor] Geo-bloqueado — execução automática desativada. Execute manualmente via Polymarket.');
+    return null;
+  }
 
   const side = vb.recommendation === 'BUY_YES' ? 'YES' : 'NO';
   const tokenId = side === 'YES' ? vb.market.yesTokenId : vb.market.noTokenId;
@@ -102,12 +109,18 @@ export async function executeValueBet(vb: ValueBet): Promise<ExecutionResult | n
 
   const orderId = await buyShares(client, tokenId, currentPrice, MAX_BET_USDC, false);
 
+  if (!orderId) {
+    // Assume geo-block — stop retrying for this process lifetime
+    geoBlocked = true;
+    console.error('[Executor] Marcado como geo-bloqueado. Próximas ordens serão ignoradas.');
+  }
+
   return {
     orderId,
     tokenId,
     side,
     price: currentPrice,
     amountUsdc: MAX_BET_USDC,
-    error: orderId ? undefined : 'Order failed — check logs',
+    error: orderId ? undefined : 'Geo-bloqueado — execute manualmente no Polymarket',
   };
 }
