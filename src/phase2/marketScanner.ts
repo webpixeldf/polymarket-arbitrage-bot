@@ -35,6 +35,8 @@ export interface EventMarket {
   probability: number;    // 0-100
   category: Category;
   volume: number;
+  yesTokenId: string;
+  noTokenId: string;
 }
 
 async function fetchPage(offset: number, orderBy: string): Promise<any[]> {
@@ -94,6 +96,17 @@ export async function scanEventMarkets(): Promise<EventMarket[]> {
         } catch { /* keep 50 */ }
       }
 
+      // Parse YES/NO token IDs from clobTokenIds
+      let yesTokenId = '';
+      let noTokenId = '';
+      if (m.clobTokenIds) {
+        try {
+          const ids = typeof m.clobTokenIds === 'string' ? JSON.parse(m.clobTokenIds) : m.clobTokenIds;
+          yesTokenId = ids[0] ?? '';
+          noTokenId = ids[1] ?? '';
+        } catch { /* keep empty */ }
+      }
+
       results.push({
         conditionId: m.conditionId,
         question: m.question,
@@ -103,6 +116,8 @@ export async function scanEventMarkets(): Promise<EventMarket[]> {
         probability,
         category: detectCategory(m.question),
         volume: parseFloat(m.volume ?? '0'),
+        yesTokenId,
+        noTokenId,
       });
     }
 

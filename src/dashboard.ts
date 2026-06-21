@@ -214,6 +214,30 @@ function html(): string {
   ${valueBetCards}
 
   <div class="section-header" style="margin-top:8px">
+    <h2>💸 Ordens Executadas</h2>
+    <span class="phase-badge">${process.env.ENABLE_PHASE2_ORDERS === 'true' ? '🟢 Auto-execução ATIVA' : '🔴 Auto-execução DESATIVADA'}</span>
+  </div>
+
+  ${store.orders.length === 0
+    ? `<div class="empty-state">${process.env.ENABLE_PHASE2_ORDERS === 'true' ? 'Nenhuma ordem executada ainda — aguardando próximo value bet.' : 'Para ativar, adicione <b>ENABLE_PHASE2_ORDERS=true</b> e <b>MAX_BET_USDC=5</b> no Railway.'}</div>`
+    : `<table>
+    <thead><tr>
+      <th>Horário</th><th>Mercado</th><th>Lado</th><th>Preço</th><th>Valor</th><th>Edge</th><th>Status</th>
+    </tr></thead>
+    <tbody>
+      ${store.orders.map(o => `<tr>
+        <td class="muted" style="font-size:0.8rem">${new Date(o.timestamp).toLocaleString('pt-BR')}</td>
+        <td style="font-size:0.8rem;max-width:260px" title="${o.question}">${o.questionPT || o.question}</td>
+        <td style="font-weight:700;color:${o.side==='YES'?'#4ade80':'#f87171'}">${o.side}</td>
+        <td>${(o.price*100).toFixed(1)}¢</td>
+        <td>$${o.amountUsdc.toFixed(2)}</td>
+        <td style="font-weight:600;color:${o.edge>0?'#4ade80':'#f87171'}">${o.edge>0?'+':''}${o.edge.toFixed(1)}%</td>
+        <td>${o.orderId ? (o.simulate ? '🟡 SIM' : '✅ OK') : '❌ Falhou'}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`}
+
+  <div class="section-header" style="margin-top:8px">
     <h2>🔬 Análise Completa da IA — Último Ciclo</h2>
     <span class="phase-badge">${store.lastScanAt ? 'Último scan: ' + new Date(store.lastScanAt).toLocaleTimeString('pt-BR') : 'Aguardando primeiro scan...'}</span>
   </div>

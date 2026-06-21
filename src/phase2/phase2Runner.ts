@@ -3,7 +3,8 @@ import { fetchNews, detectCategory } from './newsCollector';
 import { analyzeMarket } from './aiAnalyzer';
 import { detectValueBet, formatValueBetEmail } from './valueBetDetector';
 import { notify } from '../notifier';
-import { addValueBet, addAnalyzedMarket, store } from '../store';
+import { addValueBet, addAnalyzedMarket, addOrder, store } from '../store';
+import { executeValueBet } from './orderExecutor';
 
 const SCAN_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -65,6 +66,23 @@ async function runScanCycle(simulate: boolean): Promise<void> {
     await notify(subject, body);
 
     console.error(`[Phase2] VALUE BET: ${market.question.slice(0, 60)} | Edge: ${valueBet.edge.toFixed(1)}%`);
+
+    // Auto-execute order if ENABLE_PHASE2_ORDERS=true
+    const execution = await executeValueBet(valueBet, simulate);
+    if (execution) {
+      addOrder({
+        question: market.question,
+        questionPT: analysis.questionPT,
+        side: execution.side,
+        price: execution.price,
+        amountUsdc: execution.amountUsdc,
+        orderId: execution.orderId,
+        edge: edge,
+        timestamp: new Date().toISOString(),
+        simulate,
+      });
+      console.error(`[Executor] Order ${execution.orderId ? 'OK ✅' : 'FAILED ❌'} — ${execution.side} $${execution.amountUsdc} @ ${(execution.price * 100).toFixed(1)}¢`);
+    }
 
     await sleep(2000);
   }

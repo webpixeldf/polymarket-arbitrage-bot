@@ -48,6 +48,18 @@ export interface AnalyzedMarketEntry {
   timestamp: string;
 }
 
+export interface OrderEntry {
+  question: string;
+  questionPT: string;
+  side: 'YES' | 'NO';
+  price: number;
+  amountUsdc: number;
+  orderId: string | null;
+  edge: number;
+  timestamp: string;
+  simulate: boolean;
+}
+
 interface BotStore {
   startedAt: string;
   markets: string[];
@@ -55,6 +67,7 @@ interface BotStore {
   trades: TradeEntry[];
   valueBets: ValueBetEntry[];
   analyzedMarkets: AnalyzedMarketEntry[];
+  orders: OrderEntry[];
   totalProfit: number;
   simulate: boolean;
   lastScanAt: string | null;
@@ -67,6 +80,7 @@ export const store: BotStore = {
   trades: [],
   valueBets: [],
   analyzedMarkets: [],
+  orders: [],
   totalProfit: 0,
   simulate: true,
   lastScanAt: null,
@@ -107,6 +121,11 @@ export function addValueBet(vb: import('./phase2/valueBetDetector').ValueBet): v
   };
   store.valueBets.unshift(entry);
   if (store.valueBets.length > 50) store.valueBets.pop();
+}
+
+export function addOrder(order: OrderEntry): void {
+  store.orders.unshift(order);
+  if (store.orders.length > 50) store.orders.pop();
 }
 
 export function addAnalyzedMarket(entry: AnalyzedMarketEntry): void {
