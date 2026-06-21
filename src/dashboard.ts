@@ -213,6 +213,49 @@ function html(): string {
 
   ${valueBetCards}
 
+  <div class="section-header" style="margin-top:8px">
+    <h2>🔬 Análise Completa da IA — Último Ciclo</h2>
+    <span class="phase-badge">${store.lastScanAt ? 'Último scan: ' + new Date(store.lastScanAt).toLocaleTimeString('pt-BR') : 'Aguardando primeiro scan...'}</span>
+  </div>
+
+  ${store.analyzedMarkets.length === 0
+    ? `<div class="empty-state">Aguardando primeiro ciclo de análise...</div>`
+    : `<table>
+    <thead>
+      <tr>
+        <th>Categoria</th>
+        <th>Pergunta (PT)</th>
+        <th>Mercado</th>
+        <th>IA</th>
+        <th>Edge</th>
+        <th>Conf.</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${store.analyzedMarkets.map(m => {
+        const absEdge = Math.abs(m.edge);
+        const edgeColor = absEdge >= 5 ? (m.edge > 0 ? '#4ade80' : '#f87171') : absEdge >= 2 ? '#f59e0b' : '#64748b';
+        const status = m.isValueBet
+          ? `<span style="color:${m.edge>0?'#4ade80':'#f87171'};font-weight:700">🔴 VALUE BET</span>`
+          : absEdge >= 2
+            ? `<span style="color:#f59e0b">🟡 Fraco</span>`
+            : `<span class="muted">⚪ Neutro</span>`;
+        return `<tr>
+          <td style="font-size:0.8rem">${categoryLabel(m.category)}</td>
+          <td style="font-size:0.82rem;max-width:300px">
+            <a href="https://polymarket.com/event/${m.slug}" target="_blank" style="color:#e2e8f0;text-decoration:none" title="${m.question}">${m.questionPT || m.question}</a>
+          </td>
+          <td class="muted">${m.marketProb.toFixed(1)}%</td>
+          <td class="${m.aiProb > m.marketProb ? 'up' : m.aiProb < m.marketProb ? 'down' : 'muted'}">${m.aiProb.toFixed(1)}%</td>
+          <td style="font-weight:600;color:${edgeColor}">${m.edge > 0 ? '+' : ''}${m.edge.toFixed(1)}%</td>
+          <td class="muted">${m.confidence.toFixed(0)}%</td>
+          <td>${status}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>`}
+
 </body>
 </html>`;
 }

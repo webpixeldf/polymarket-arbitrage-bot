@@ -33,14 +33,29 @@ export interface ValueBetEntry {
   timestamp: string;
 }
 
+export interface AnalyzedMarketEntry {
+  question: string;
+  questionPT: string;
+  slug: string;
+  category: string;
+  marketProb: number;
+  aiProb: number;
+  edge: number;
+  confidence: number;
+  isValueBet: boolean;
+  timestamp: string;
+}
+
 interface BotStore {
   startedAt: string;
   markets: string[];
   prices: Record<string, PriceEntry>;
   trades: TradeEntry[];
   valueBets: ValueBetEntry[];
+  analyzedMarkets: AnalyzedMarketEntry[];
   totalProfit: number;
   simulate: boolean;
+  lastScanAt: string | null;
 }
 
 export const store: BotStore = {
@@ -49,8 +64,10 @@ export const store: BotStore = {
   prices: {},
   trades: [],
   valueBets: [],
+  analyzedMarkets: [],
   totalProfit: 0,
   simulate: true,
+  lastScanAt: null,
 };
 
 export function updatePrice(asset: string, side: 'up' | 'down', price: number): void {
@@ -87,4 +104,17 @@ export function addValueBet(vb: import('./phase2/valueBetDetector').ValueBet): v
   };
   store.valueBets.unshift(entry);
   if (store.valueBets.length > 50) store.valueBets.pop();
+}
+
+export function addAnalyzedMarket(entry: AnalyzedMarketEntry): void {
+  // Replace if same question already exists (update from new scan)
+  const idx = store.analyzedMarkets.findIndex(m => m.question === entry.question);
+  if (idx >= 0) {
+    store.analyzedMarkets[idx] = entry;
+  } else {
+    store.analyzedMarkets.push(entry);
+  }
+  // Keep max 100, sorted by abs edge descending
+  store.analyzedMarkets.sort((a, b) => Math.abs(b.edge) - Math.abs(a.edge));
+  if (store.analyzedMarkets.length > 100) store.analyzedMarkets.pop();
 }

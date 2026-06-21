@@ -3,7 +3,7 @@ import { fetchNews, detectCategory } from './newsCollector';
 import { analyzeMarket } from './aiAnalyzer';
 import { detectValueBet, formatValueBetEmail } from './valueBetDetector';
 import { notify } from '../notifier';
-import { addValueBet } from '../store';
+import { addValueBet, addAnalyzedMarket, store } from '../store';
 
 const SCAN_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -35,6 +35,24 @@ async function runScanCycle(simulate: boolean): Promise<void> {
     const analysis = await analyzeMarket(market.question, market.probability, news);
     if (!analysis) continue;
 
+    const edge = analysis.probability - market.probability;
+    const isValueBet = Math.abs(edge) >= parseFloat(process.env.MIN_EDGE ?? '5')
+      && analysis.confidence >= parseFloat(process.env.MIN_CONFIDENCE ?? '60');
+
+    // Always record in the full analysis table
+    addAnalyzedMarket({
+      question: market.question,
+      questionPT: analysis.questionPT,
+      slug: market.slug,
+      category,
+      marketProb: market.probability,
+      aiProb: analysis.probability,
+      edge,
+      confidence: analysis.confidence,
+      isValueBet,
+      timestamp: new Date().toISOString(),
+    });
+
     const valueBet = detectValueBet(market, analysis);
     if (!valueBet) continue;
 
@@ -50,6 +68,7 @@ async function runScanCycle(simulate: boolean): Promise<void> {
     await sleep(2000);
   }
 
+  store.lastScanAt = new Date().toISOString();
   console.error(`[Phase2] Scan complete — analyzed:${analyzed} skipped(date):${skippedDate} skipped(prob):${skippedProb} valueBets:${valueBetsFound}. Next in 15min.`);
 }
 
