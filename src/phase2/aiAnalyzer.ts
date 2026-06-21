@@ -46,23 +46,37 @@ Responda APENAS com um JSON válido neste formato exato:
 
   try {
     const response = await client.chat.completions.create({
-      model: 'deepseek-reasoner',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 500,
+      model: 'deepseek-chat',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a quantitative analyst for prediction markets. Always respond with valid JSON only, no markdown, no explanation outside the JSON.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      max_tokens: 600,
+      temperature: 0.3,
     });
 
-    const content = response.choices[0]?.message?.content ?? '';
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
+    const raw = response.choices[0]?.message?.content ?? '';
+    // Strip markdown code fences if present
+    const clean = raw.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+    const jsonMatch = clean.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error('[AI] No JSON in response:', raw.slice(0, 200));
+      return null;
+    }
 
     const parsed = JSON.parse(jsonMatch[0]);
-    return {
+    const result = {
       probability: Math.max(0, Math.min(100, Number(parsed.probability))),
       confidence: Math.max(0, Math.min(100, Number(parsed.confidence))),
       reasoning: String(parsed.reasoning ?? ''),
       bullishFactors: Array.isArray(parsed.bullishFactors) ? parsed.bullishFactors : [],
       bearishFactors: Array.isArray(parsed.bearishFactors) ? parsed.bearishFactors : [],
     };
+    console.error(`[AI] "${question.slice(0, 50)}" → market:${marketProbability.toFixed(1)}% AI:${result.probability.toFixed(1)}% conf:${result.confidence.toFixed(0)}%`);
+    return result;
   } catch (err) {
     console.error('[AI] DeepSeek error:', (err as Error).message);
     return null;
