@@ -10,7 +10,8 @@
     "clean": "rimraf dist",
     "sim": "ts-node src/main.ts --simulation",
     "prod": "node dist/main.js --production",
-    "start": "node dist/main.js"
+    "start": "node dist/main.js",
+    "backtest": "ts-node src/backtest.ts"
   },
   "dependencies": {
     "@polymarket/clob-client": "^4.0.0",

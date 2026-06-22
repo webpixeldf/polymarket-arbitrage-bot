@@ -61,6 +61,74 @@ export async function getBestAsk(tokenId: string): Promise<number | null> {
   }
 }
 
+export interface OrderBookData {
+  bestBid: number | null;
+  bestAsk: number | null;
+  spread: number | null;
+  liquidityAtAsk: number;  // USDC disponível no melhor ask (shares × price)
+  totalBidSize: number;
+  totalAskSize: number;
+  askLevels: number;       // níveis de preço distintos no ask
+  bidLevels: number;
+}
+
+export async function getOrderBookData(tokenId: string): Promise<OrderBookData> {
+  const empty: OrderBookData = { bestBid: null, bestAsk: null, spread: null, liquidityAtAsk: 0, totalBidSize: 0, totalAskSize: 0, askLevels: 0, bidLevels: 0 };
+  try {
+    const resp = await axios.get<OrderBook>(`${config.clobApiUrl}/book`, {
+      params: { token_id: tokenId },
+      timeout: 5000,
+    });
+    const bids = resp.data.bids ?? [];
+    const asks = resp.data.asks ?? [];
+    if (!asks.length && !bids.length) return empty;
+
+    const bestAsk = asks.length ? Math.min(...asks.map(a => parseFloat(a.price))) : null;
+    const bestBid = bids.length ? Math.max(...bids.map(b => parseFloat(b.price))) : null;
+    const spread  = (bestAsk !== null && bestBid !== null) ? bestAsk - bestBid : null;
+
+    // Liquidez no melhor ask em USDC (shares disponíveis × preço)
+    const liquidityAtAsk = bestAsk !== null
+      ? asks.filter(a => Math.abs(parseFloat(a.price) - bestAsk) < 0.001)
+            .reduce((s, a) => s + parseFloat(a.size) * bestAsk, 0)
+      : 0;
+
+    const totalBidSize = bids.reduce((s, b) => s + parseFloat(b.size), 0);
+    const totalAskSize = asks.reduce((s, a) => s + parseFloat(a.size), 0);
+    const askLevels    = new Set(asks.map(a => a.price)).size;
+    const bidLevels    = new Set(bids.map(b => b.price)).size;
+
+    return { bestBid, bestAsk, spread, liquidityAtAsk, totalBidSize, totalAskSize, askLevels, bidLevels };
+  } catch {
+    return empty;
+  }
+}
+
+export async function sellShares(
+  client: ClobClient,
+  tokenId: string,
+  price: number,
+  shares: number,
+  simulate: boolean
+): Promise<string | null> {
+  if (simulate) {
+    console.error(`[SIM] SELL ${shares} shares @ ${price.toFixed(4)} token=${tokenId}`);
+    return 'sim-order-id';
+  }
+  try {
+    const resp = await client.createAndPostMarketOrder({
+      tokenID: tokenId,
+      price,
+      amount: shares,
+      side: Side.SELL,
+    }, undefined, OrderType.FOK);
+    return (resp as any).orderID ?? null;
+  } catch (err) {
+    console.error(`[API] Sell order failed:`, (err as Error).message);
+    return null;
+  }
+}
+
 export async function buyShares(
   client: ClobClient,
   tokenId: string,
