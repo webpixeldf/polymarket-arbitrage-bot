@@ -293,8 +293,18 @@ async function scanAll(simulate: boolean, client: ReturnType<typeof createClobCl
       const ob  = await getOrderBookData(tid);
       await sleep(150);
       checked++;
-      if (ob.bestAsk === null || ob.bestAsk < MIN_PRICE || ob.bestAsk > MAX_PRICE) continue;
-      if (ob.liquidityAtAsk < BET_USDC) continue;
+      if (ob.bestAsk === null) {
+        console.error(`[Multi] ⏭  Sem ask no CLOB: "${question.slice(0,50)}"`);
+        continue;
+      }
+      if (ob.bestAsk < MIN_PRICE || ob.bestAsk > MAX_PRICE) {
+        console.error(`[Multi] ⏭  Preço fora da faixa: ${(ob.bestAsk*100).toFixed(0)}¢ (${(MIN_PRICE*100).toFixed(0)}-${(MAX_PRICE*100).toFixed(0)}¢) | "${question.slice(0,40)}"`);
+        continue;
+      }
+      if (ob.liquidityAtAsk < BET_USDC) {
+        console.error(`[Multi] ⏭  Liquidez insuficiente: $${ob.liquidityAtAsk.toFixed(2)} < $${BET_USDC} | "${question.slice(0,40)}"`);
+        continue;
+      }
       betSide    = preSideHint;
       tokenId    = tid;
       entryPrice = ob.bestAsk;
@@ -307,14 +317,23 @@ async function scanAll(simulate: boolean, client: ReturnType<typeof createClobCl
       await sleep(150);
       checked++;
 
-      if (yesOb.bestAsk !== null && yesOb.bestAsk >= Math.max(MIN_PRICE, CONSENSUS_MIN) && yesOb.bestAsk <= MAX_PRICE && yesOb.liquidityAtAsk >= BET_USDC) {
-        betSide = 'YES'; tokenId = yesTokenId; entryPrice = yesOb.bestAsk;
-        verifyReason = `Consenso ${(yesOb.bestAsk*100).toFixed(0)}¢ | resolve em ${hoursLeft.toFixed(1)}h`;
-      } else if (noOb.bestAsk !== null && noOb.bestAsk >= Math.max(MIN_PRICE, CONSENSUS_MIN) && noOb.bestAsk <= MAX_PRICE && noOb.liquidityAtAsk >= BET_USDC) {
-        betSide = 'NO'; tokenId = noTokenId; entryPrice = noOb.bestAsk;
-        verifyReason = `Consenso ${(noOb.bestAsk*100).toFixed(0)}¢ | resolve em ${hoursLeft.toFixed(1)}h`;
+      const minP = Math.max(MIN_PRICE, CONSENSUS_MIN);
+      const yesOk = yesOb.bestAsk !== null && yesOb.bestAsk >= minP && yesOb.bestAsk <= MAX_PRICE && yesOb.liquidityAtAsk >= BET_USDC;
+      const noOk  = noOb.bestAsk  !== null && noOb.bestAsk  >= minP && noOb.bestAsk  <= MAX_PRICE && noOb.liquidityAtAsk  >= BET_USDC;
+
+      if (yesOk) {
+        betSide = 'YES'; tokenId = yesTokenId; entryPrice = yesOb.bestAsk!;
+        verifyReason = `Consenso ${(yesOb.bestAsk!*100).toFixed(0)}¢ | resolve em ${hoursLeft.toFixed(1)}h`;
+      } else if (noOk) {
+        betSide = 'NO'; tokenId = noTokenId; entryPrice = noOb.bestAsk!;
+        verifyReason = `Consenso ${(noOb.bestAsk!*100).toFixed(0)}¢ | resolve em ${hoursLeft.toFixed(1)}h`;
+      } else {
+        // Log diagnóstico
+        const yP = yesOb.bestAsk !== null ? `YES:${(yesOb.bestAsk*100).toFixed(0)}¢ liq:$${yesOb.liquidityAtAsk.toFixed(1)}` : 'YES:sem ask';
+        const nP = noOb.bestAsk  !== null ? `NO:${(noOb.bestAsk*100).toFixed(0)}¢ liq:$${noOb.liquidityAtAsk.toFixed(1)}`   : 'NO:sem ask';
+        console.error(`[Multi] ⏭  CLOB fora da faixa ${(minP*100).toFixed(0)}-${(MAX_PRICE*100).toFixed(0)}¢ | ${yP} | ${nP} | "${question.slice(0,40)}"`);
+        continue;
       }
-      if (!betSide) continue;
     }
 
     // ── ENTRADA ──
