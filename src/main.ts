@@ -6,6 +6,7 @@ import { startDashboard } from './dashboard';
 import { store } from './store';
 import { startLastMinuteScalper } from './lastMinuteScalper';
 import { startPhase2 } from './phase2/phase2Runner';
+import { startConvergenceScalper } from './convergenceScalper';
 import { sendStartupEmail } from './notifier';
 
 function sleep(ms: number): Promise<void> {
@@ -91,8 +92,7 @@ async function main(): Promise<void> {
   await Promise.all([
     ...config.markets.map(asset => runAssetMonitor(asset)),
     startLastMinuteScalper(isSimulation),
-    // Phase 2 desativada — opera mercados de longo prazo, não 5 minutos
-    // startPhase2(isSimulation),
+    startConvergenceScalper(isSimulation),
     watchWalletBalance(),
   ]);
 }
