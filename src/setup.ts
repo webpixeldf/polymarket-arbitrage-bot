@@ -40,10 +40,11 @@ async function setup(): Promise<void> {
     // Salva no .env
     const envPath = path.join(process.cwd(), '.env');
     let env = fs.readFileSync(envPath, 'utf8');
+    // ^ âncora de linha + flag m evita match em DEEPSEEK_API_KEY etc.
     env = env
-      .replace(/API_KEY=.*/, `API_KEY=${creds.key}`)
-      .replace(/API_SECRET=.*/, `API_SECRET=${creds.secret}`)
-      .replace(/API_PASSPHRASE=.*/, `API_PASSPHRASE=${creds.passphrase}`);
+      .replace(/^API_KEY=.*/m,        `API_KEY=${creds.key}`)
+      .replace(/^API_SECRET=.*/m,     `API_SECRET=${creds.secret}`)
+      .replace(/^API_PASSPHRASE=.*/m, `API_PASSPHRASE=${creds.passphrase}`);
     fs.writeFileSync(envPath, env);
 
     console.log('\n✅ .env atualizado! Reinicie o bot:');
