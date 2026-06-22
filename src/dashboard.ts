@@ -291,7 +291,9 @@ function html(): string {
   </div>
 
   ${store.crossArbOpportunities.length === 0
-    ? `<div class="empty-state">⏳ Aguardando primeiro ciclo de arbitragem cross-platform (inicia 2 min após o bot subir)...<br><span class="muted" style="font-size:0.8rem">Compara preços Kalshi vs Polymarket. Quando Kalshi e Poly divergem &gt;7%, é sinal de oportunidade.</span></div>`
+    ? store.lastCrossArbScanAt
+      ? `<div class="empty-state">⚪ Ciclo concluído — nenhum par Kalshi × Polymarket com divergência ≥ 5% encontrado.<br><span class="muted" style="font-size:0.8rem">Verifique o diagnóstico no Telegram para detalhes. Próximo scan em ~10 min.</span></div>`
+      : `<div class="empty-state">⏳ Aguardando primeiro ciclo (inicia 2 min após o bot subir)...<br><span class="muted" style="font-size:0.8rem">Compara preços Kalshi vs Polymarket. Divergência ≥ 5% dispara alerta.</span></div>`
     : `<table>
     <thead><tr>
       <th>Kalshi (referência)</th>

@@ -73,10 +73,16 @@ async function runCrossArbCycle(simulate: boolean): Promise<void> {
     `[Phase3] Kalshi: ${kalshiMarkets.length} | Poly: ${polyMarkets.length} | Oportunidades: ${opportunities.length}`
   );
 
-  // === DIAGNÓSTICO NOS PRIMEIROS 2 CICLOS OU SE NÃO ENCONTROU NADA ===
-  if (cycleCount <= 2 || opportunities.length === 0) {
-    const topThree = opportunities.slice(0, 3).map((o, i) =>
-      `  ${i + 1}. ${o.polyQuestion.slice(0, 50)}\n     Poly: ${(o.polyProb*100).toFixed(1)}% | Kalshi: ${(o.kalshiProb*100).toFixed(1)}% | Div: ${(o.divergence*100).toFixed(1)}% | Match: ${(o.matchScore*100).toFixed(0)}%`
+  // === DIAGNÓSTICO NOS PRIMEIROS 3 CICLOS OU SE NÃO ENCONTROU NADA ===
+  if (cycleCount <= 3 || opportunities.length === 0) {
+    const kalshiSample = kalshiMarkets.slice(0, 5).map((m, i) =>
+      `  K${i+1}. ${m.title.slice(0, 60)} [${m.ticker}]`
+    );
+    const polySample = polyMarkets.slice(0, 5).map((m, i) =>
+      `  P${i+1}. ${m.question.slice(0, 60)}`
+    );
+    const topMatches = opportunities.slice(0, 3).map((o, i) =>
+      `  ${i+1}. Poly: "${o.polyQuestion.slice(0, 40)}"\n     Kalshi: "${o.kalshiTitle.slice(0, 40)}"\n     Div: ${(o.divergence*100).toFixed(1)}% | Match: ${(o.matchScore*100).toFixed(0)}% | Poly $${o.polyLiquidity.toFixed(0)}`
     );
 
     await notify(
@@ -86,11 +92,17 @@ async function runCrossArbCycle(simulate: boolean): Promise<void> {
         ``,
         `✅ Kalshi: ${kalshiMarkets.length} mercados ativos`,
         `📊 Polymarket: ${polyMarkets.length} mercados escaneados`,
-        `💡 Pares com divergência ≥ limiar: ${opportunities.length}`,
+        `💡 Oportunidades encontradas: ${opportunities.length}`,
+        ``,
+        `📋 Amostra Kalshi (primeiros 5):`,
+        kalshiSample.join('\n'),
+        ``,
+        `📋 Amostra Polymarket (top 5 liquidez):`,
+        polySample.join('\n'),
         ``,
         opportunities.length > 0
-          ? `📋 Melhores pares encontrados:\n${topThree.join('\n\n')}`
-          : `⚪ Nenhum par encontrou divergência ≥ ${process.env.KALSHI_MIN_DIVERGENCE ? (parseFloat(process.env.KALSHI_MIN_DIVERGENCE)*100).toFixed(0) : '7'}% com match ≥ ${process.env.KALSHI_MIN_MATCH ? (parseFloat(process.env.KALSHI_MIN_MATCH)*100).toFixed(0) : '30'}% e liquidez ≥ $${process.env.KALSHI_MIN_LIQUIDITY ?? '2000'}`,
+          ? `🎯 Melhores pares:\n${topMatches.join('\n\n')}`
+          : `⚪ Sem pares com divergência ≥ 5%, match ≥ 20% e liquidez ≥ $500`,
         ``,
         `Próximo ciclo em 10 minutos.`,
       ].join('\n')
