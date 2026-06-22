@@ -62,6 +62,21 @@ export interface OrderEntry {
   simulate: boolean;
 }
 
+export interface ScalperTrade {
+  asset: string;
+  side: 'UP' | 'DOWN';
+  entryPrice: number;
+  secsAtEntry: number;
+  betUsdc: number;
+  potentialProfit: number;
+  simulate: boolean;
+  timestamp: string;
+  marketEndTime: string;
+  settled: boolean;
+  won: boolean | null;
+  pnl: number | null;
+}
+
 export interface CrossArbEntry {
   kalshiTicker: string;
   kalshiTitle: string;
@@ -89,6 +104,8 @@ interface BotStore {
   lastScanAt: string | null;
   crossArbOpportunities: CrossArbEntry[];
   lastCrossArbScanAt: string | null;
+  scalperTrades: ScalperTrade[];
+  scalperProfit: number;
 }
 
 export const store: BotStore = {
@@ -104,6 +121,8 @@ export const store: BotStore = {
   lastScanAt: null,
   crossArbOpportunities: [],
   lastCrossArbScanAt: null,
+  scalperTrades: [],
+  scalperProfit: 0,
 };
 
 export function updatePrice(asset: string, side: 'up' | 'down', price: number): void {

@@ -187,6 +187,14 @@ function html(): string {
       <div class="value" style="color:#a78bfa">${store.crossArbOpportunities.length}</div>
     </div>
     <div class="card">
+      <div class="label">Scalper trades</div>
+      <div class="value" style="color:#38bdf8">${store.scalperTrades.length}</div>
+    </div>
+    <div class="card">
+      <div class="label">Scalper P&L</div>
+      <div class="value" style="color:${store.scalperProfit >= 0 ? '#4ade80' : '#f87171'}">${store.scalperProfit >= 0 ? '+' : ''}$${store.scalperProfit.toFixed(2)}</div>
+    </div>
+    <div class="card">
       <div class="label">Stop-losses</div>
       <div class="value" style="color:#f87171">${trades.filter(t => t.mode === 'stop-loss').length}</div>
     </div>
@@ -284,6 +292,41 @@ function html(): string {
     </tbody>
   </table>`}
 
+
+  <div class="section-header" style="margin-top:8px">
+    <h2>⚡ Fase 4 — Last Minute Scalper (5 minutos)</h2>
+    <span class="phase-badge">Entrada nos últimos 90s quando lado vencedor ≥ 80¢</span>
+  </div>
+
+  ${store.scalperTrades.length === 0
+    ? `<div class="empty-state">⏳ Aguardando oportunidade — monitora mercados de 5 min a cada 12s.<br><span class="muted" style="font-size:0.8rem">Entra quando UP ou DOWN está entre 80-93¢ nos últimos 90 segundos.</span></div>`
+    : `<table>
+    <thead><tr>
+      <th>Horário</th><th>Ativo</th><th>Lado</th><th>Entrada</th><th>Seg. restantes</th><th>Potencial</th><th>Resultado</th><th>P&L</th>
+    </tr></thead>
+    <tbody>
+      ${store.scalperTrades.slice(0, 20).map(t => {
+        const resultCell = !t.settled
+          ? `<span style="color:#f59e0b">⏳ Aguardando</span>`
+          : t.won
+            ? `<span style="color:#4ade80;font-weight:700">✅ GANHOU</span>`
+            : `<span style="color:#f87171;font-weight:700">❌ PERDEU</span>`;
+        const pnlCell = t.pnl === null
+          ? `<span class="muted">—</span>`
+          : `<span style="color:${t.pnl >= 0 ? '#4ade80' : '#f87171'};font-weight:700">${t.pnl >= 0 ? '+' : ''}$${t.pnl.toFixed(2)}</span>`;
+        return `<tr>
+          <td class="muted" style="font-size:0.8rem">${new Date(t.timestamp).toLocaleTimeString('pt-BR')}</td>
+          <td><b>${t.asset}</b></td>
+          <td style="color:${t.side === 'UP' ? '#4ade80' : '#f87171'};font-weight:700">${t.side}</td>
+          <td>${(t.entryPrice * 100).toFixed(1)}¢</td>
+          <td class="muted">${t.secsAtEntry}s</td>
+          <td style="color:#38bdf8">+$${t.potentialProfit.toFixed(2)}</td>
+          <td>${resultCell}</td>
+          <td>${pnlCell}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>`}
 
   <div class="section-header" style="margin-top:8px">
     <h2>🔀 Fase 3 — Arbitragem Cross-Platform (Manifold × Polymarket)</h2>
