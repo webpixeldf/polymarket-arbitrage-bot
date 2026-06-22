@@ -1,228 +1,167 @@
 import axios from 'axios';
-import { getBestAsk } from './api';
+import { getBestAsk, nextRoundEndMs, buyShares, createClobClient } from './api';
+import { updatePrice, store } from './store';
 import { notify } from './notifier';
-import { store } from './store';
 import { config } from './config';
 
 // ── Config ─────────────────────────────────────────────────────────────────
-const ENTRY_MIN   = parseFloat(process.env.SCALPER_MIN_PRICE     ?? '0.80'); // 80¢ mínimo
-const ENTRY_MAX   = parseFloat(process.env.SCALPER_MAX_PRICE     ?? '0.93'); // 93¢ máximo
-const BET_USDC    = parseFloat(process.env.SCALPER_BET_USDC      ?? '2');    // $ por trade
-const WINDOW_SEC  = parseInt  (process.env.SCALPER_WINDOW_SEC    ?? '90', 10); // janela de entrada
-const MIN_SEC     = parseInt  (process.env.SCALPER_MIN_SEC       ?? '25', 10); // mínimo para entrar
-const SCAN_MS     = parseInt  (process.env.SCALPER_SCAN_MS       ?? '12000', 10); // intervalo de scan
-const ASSETS: string[] = (process.env.SCALPER_ASSETS ?? '')
+const BET_USDC       = parseFloat(process.env.SCALPER_BET_USDC  ?? '1');
+const IMBALANCE_MIN  = parseFloat(process.env.IMBALANCE_MIN     ?? '0.30'); // entra quando um lado ≤ 30¢
+const SCAN_MS        = parseInt  (process.env.SCALPER_SCAN_MS   ?? '10000', 10);
+const MIN_SEC        = parseInt  (process.env.SCALPER_MIN_SEC   ?? '20',  10);
+const ASSETS_5M: string[] = (process.env.SCALPER_ASSETS ?? 'btc,eth,sol,xrp,doge')
+  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+const ASSETS_15M: string[] = (process.env.MARKETS_15M ?? 'btc,eth,sol,xrp,doge')
   .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// ── Market finder ──────────────────────────────────────────────────────────
-async function findNext5mMarket(asset: string): Promise<any | null> {
+function marketLink(market: any): string {
+  const slug = market.events?.[0]?.slug ?? market.slug ?? '';
+  return `https://polymarket.com/event/${slug}`;
+}
+
+// ── Market finders ─────────────────────────────────────────────────────────
+async function findMarket(asset: string, minutes: 5 | 15): Promise<any | null> {
   try {
-    const slugPattern = `${asset}-updown-5m`;
+    const pattern = `${asset}-updown-${minutes}m`;
     const resp = await axios.get(`${config.gammaApiUrl}/markets`, {
       params: { active: true, limit: 300, order: 'createdAt', ascending: false },
       timeout: 10000,
     });
-    const markets: any[] = resp.data ?? [];
     const now = Date.now();
-    const valid = markets.filter(m =>
-      m.slug?.includes(slugPattern) &&
-      m.clobTokenIds && m.endDate &&
+    const valid = (resp.data ?? []).filter((m: any) =>
+      m.slug?.includes(pattern) && m.clobTokenIds && m.endDate &&
       new Date(m.endDate).getTime() > now + MIN_SEC * 1000
     );
     if (!valid.length) return null;
-    valid.sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
+    valid.sort((a: any, b: any) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
     return valid[0];
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 // ── State ──────────────────────────────────────────────────────────────────
-// Tracks markets we already entered this session
-const enteredMarkets = new Set<string>();
+const enteredRounds = new Set<string>();
 
-// ── Settlement checker ─────────────────────────────────────────────────────
-async function settleScalperTrade(params: {
-  tokenId: string;
-  asset: string;
-  side: 'UP' | 'DOWN';
-  entryPrice: number;
-  simulate: boolean;
-  tradeTimestamp: string;
-}): Promise<void> {
-  const { tokenId, asset, side, entryPrice, simulate, tradeTimestamp } = params;
-
-  // Poll price after settlement — winning token → 1.00, losing → 0.00
-  await sleep(5000);
-  const finalPrice = await getBestAsk(tokenId);
-  const won = finalPrice !== null && finalPrice >= 0.95;
-
-  const profitPct = (1 / entryPrice - 1) * 100;
-  const pnl = won
-    ? parseFloat((profitPct / 100 * BET_USDC).toFixed(2))
-    : -BET_USDC;
-
-  // Update trade record
-  const trade = store.scalperTrades.find(
-    t => !t.settled && t.timestamp === tradeTimestamp
-  );
-  if (trade) {
-    trade.settled = true;
-    trade.won = won;
-    trade.pnl = pnl;
-    if (won) store.scalperProfit += pnl;
-    else store.scalperProfit -= BET_USDC;
-  }
-
-  console.error(
-    `[Scalper][${asset}] Resultado: ${won ? '✅ GANHOU' : '❌ PERDEU'} | PnL: ${pnl > 0 ? '+' : ''}$${pnl.toFixed(2)}`
-  );
-
-  const simLabel = simulate ? '[SIMULAÇÃO] ' : '';
-  await notify(
-    `${simLabel}⚡ Scalper ${asset} ${side}: ${won ? '✅ GANHOU' : '❌ PERDEU'}`,
-    [
-      `⚡ RESULTADO — LAST MINUTE SCALPER`,
-      ``,
-      `Ativo: ${asset}`,
-      `Lado: ${side}`,
-      `Entrada: ${(entryPrice * 100).toFixed(1)}¢`,
-      ``,
-      won
-        ? `✅ GANHOU! P&L: +$${pnl.toFixed(2)} (+${profitPct.toFixed(1)}%)`
-        : `❌ PERDEU. P&L: -$${BET_USDC.toFixed(2)}`,
-      ``,
-      `💰 Lucro acumulado scalper: ${store.scalperProfit >= 0 ? '+' : ''}$${store.scalperProfit.toFixed(2)}`,
-    ].join('\n')
-  );
-}
-
-// ── Main scan cycle ────────────────────────────────────────────────────────
-async function scanAsset(asset: string, simulate: boolean): Promise<void> {
-  const market = await findNext5mMarket(asset);
+// ── Core logic: detecta e entra com hedge ─────────────────────────────────
+async function scanAndEnter(
+  asset: string,
+  minutes: 5 | 15,
+  simulate: boolean,
+  client: ReturnType<typeof createClobClient>
+): Promise<void> {
+  const market = await findMarket(asset, minutes);
   if (!market) return;
 
-  const endMs  = new Date(market.endDate).getTime();
+  const endMs    = minutes === 5 ? nextRoundEndMs(5) : nextRoundEndMs(15);
   const secsLeft = (endMs - Date.now()) / 1000;
+  if (secsLeft < MIN_SEC) return;
 
-  // Only enter in the entry window
-  if (secsLeft > WINDOW_SEC || secsLeft < MIN_SEC) return;
-
-  // Skip if already entered this round
-  if (enteredMarkets.has(market.conditionId)) return;
-
-  // Parse token IDs
   let tokenIds: string[];
   try {
     tokenIds = typeof market.clobTokenIds === 'string'
-      ? JSON.parse(market.clobTokenIds)
-      : market.clobTokenIds;
+      ? JSON.parse(market.clobTokenIds) : market.clobTokenIds;
   } catch { return; }
   const [upTokenId, downTokenId] = tokenIds;
 
-  // Get prices
-  const [upAsk, downAsk] = await Promise.all([
-    getBestAsk(upTokenId),
-    getBestAsk(downTokenId),
-  ]);
+  const [upAsk, downAsk] = await Promise.all([getBestAsk(upTokenId), getBestAsk(downTokenId)]);
+  if (upAsk !== null) updatePrice(asset, 'up', upAsk);
+  if (downAsk !== null) updatePrice(asset, 'down', downAsk);
   if (upAsk === null || downAsk === null) return;
 
-  // Find which side is in entry range
-  let side: 'UP' | 'DOWN' | null = null;
-  let entryPrice = 0;
-  let tokenId = '';
+  const combined = upAsk + downAsk;
 
-  if (upAsk >= ENTRY_MIN && upAsk <= ENTRY_MAX) {
-    side = 'UP'; entryPrice = upAsk; tokenId = upTokenId;
-  } else if (downAsk >= ENTRY_MIN && downAsk <= ENTRY_MAX) {
-    side = 'DOWN'; entryPrice = downAsk; tokenId = downTokenId;
-  }
+  // Detecta desequilíbrio: um lado ≤ IMBALANCE_MIN (30¢ por padrão)
+  const cheapSide  = upAsk <= IMBALANCE_MIN ? 'UP' : downAsk <= IMBALANCE_MIN ? 'DOWN' : null;
+  if (!cheapSide) return; // mercado equilibrado, não entra
 
-  if (!side) return;
+  const roundKey = `${market.conditionId}-${minutes}m`;
+  if (enteredRounds.has(roundKey)) return;
+  enteredRounds.add(roundKey);
 
-  enteredMarkets.add(market.conditionId);
+  const cheapPrice = cheapSide === 'UP' ? upAsk : downAsk;
+  const dearPrice  = cheapSide === 'UP' ? downAsk : upAsk;
+  const cheapToken = cheapSide === 'UP' ? upTokenId : downTokenId;
+  const dearToken  = cheapSide === 'UP' ? downTokenId : upTokenId;
+  const multiplier = (1 / cheapPrice).toFixed(1);
 
-  const profitPct  = (1 / entryPrice - 1) * 100;
-  const potential  = (profitPct / 100 * BET_USDC);
-  const timestamp  = new Date().toISOString();
+  // Divide $1 ao meio: $0.50 no lado barato (loteria) + $0.50 no lado caro (hedge)
+  const betCheap = BET_USDC * 0.50;
+  const betDear  = BET_USDC * 0.50;
+  const sharesCheap = Math.floor((betCheap / cheapPrice) * 10) / 10;
+  const sharesDear  = Math.floor((betDear  / dearPrice)  * 10) / 10;
+
+  // Cenários de resultado
+  const ifCheapWins = (sharesCheap * 1).toFixed(2);
+  const ifDearWins  = (sharesDear  * 1 - BET_USDC).toFixed(2);
+
+  const mins = Math.floor(secsLeft / 60);
+  const secs = Math.floor(secsLeft % 60);
+  const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+  const simLabel = simulate ? '🔔 [SINAL]' : '⚡ [EXECUTADO]';
+  const label15  = minutes === 15 ? ' (15min)' : ' (5min)';
 
   console.error(
-    `[Scalper][${asset}] ENTRADA ${side} @ ${(entryPrice*100).toFixed(1)}¢ | ` +
-    `${secsLeft.toFixed(0)}s restantes | Pot: +$${potential.toFixed(2)}`
+    `[Scalper][${asset}${label15}] HEDGE ${cheapSide} @ ${(cheapPrice*100).toFixed(0)}¢ | ` +
+    `combined: ${(combined*100).toFixed(0)}¢ | ${timeStr} restantes`
   );
 
-  // Record trade
+  // Executa ordens (ou simula)
+  if (!simulate) {
+    if (sharesCheap > 0) await buyShares(client, cheapToken, cheapPrice, sharesCheap, false);
+    if (sharesDear  > 0) await buyShares(client, dearToken,  dearPrice,  sharesDear,  false);
+  }
+
+  // Store
   store.scalperTrades.unshift({
-    asset: asset.toUpperCase(),
-    side,
-    entryPrice,
-    secsAtEntry: Math.round(secsLeft),
-    betUsdc: BET_USDC,
-    potentialProfit: parseFloat(potential.toFixed(2)),
-    simulate,
-    timestamp,
-    marketEndTime: market.endDate,
-    settled: false,
-    won: null,
-    pnl: null,
+    asset: asset.toUpperCase(), side: cheapSide, entryPrice: cheapPrice,
+    secsAtEntry: Math.round(secsLeft), betUsdc: BET_USDC,
+    potentialProfit: parseFloat(ifCheapWins),
+    simulate, timestamp: new Date().toISOString(),
+    marketEndTime: market.endDate, settled: false, won: null, pnl: null,
   });
   if (store.scalperTrades.length > 100) store.scalperTrades.pop();
 
-  // Alert
-  const simLabel = simulate ? '[SIMULAÇÃO] ' : '';
   await notify(
-    `${simLabel}⚡ SCALPER — ${asset.toUpperCase()} ${side} @ ${(entryPrice*100).toFixed(1)}¢ (${Math.round(secsLeft)}s restantes)`,
+    `${simLabel} ${asset.toUpperCase()}${label15} HEDGE — ${cheapSide} a ${(cheapPrice*100).toFixed(0)}¢`,
     [
-      `⚡ LAST MINUTE SCALPER — ENTRADA`,
+      `🎯 ENTRADA COM HEDGE — ${asset.toUpperCase()}${label15}`,
       ``,
-      `Ativo: ${asset.toUpperCase()}`,
-      `Lado vencedor: ${side}`,
-      `Preço de entrada: ${(entryPrice*100).toFixed(1)}¢`,
-      `Tempo restante: ${Math.round(secsLeft)}s`,
+      `📉 ${cheapSide} está em ${(cheapPrice*100).toFixed(0)}¢ (${multiplier}x potencial)`,
+      `⏱ Tempo restante: ${timeStr}`,
       ``,
-      `💰 Aposta: $${BET_USDC}`,
-      `✅ Se ganhar: +$${potential.toFixed(2)} (+${profitPct.toFixed(1)}%)`,
-      `❌ Se perder: -$${BET_USDC}`,
+      `💰 $${BET_USDC.toFixed(2)} dividido em 2:`,
+      `   $${betCheap.toFixed(2)} no lado ${cheapSide} (${(cheapPrice*100).toFixed(0)}¢) → ${sharesCheap} shares`,
+      `   $${betDear.toFixed(2)} no lado ${cheapSide === 'UP' ? 'DOWN' : 'UP'} (${(dearPrice*100).toFixed(0)}¢) → ${sharesDear} shares`,
       ``,
-      `📊 UP: ${(upAsk*100).toFixed(1)}¢  |  DOWN: ${(downAsk*100).toFixed(1)}¢`,
+      `   ✅ Se ${cheapSide} ganhar: +$${ifCheapWins}`,
+      `   ⚠️ Se ${cheapSide === 'UP' ? 'DOWN' : 'UP'} ganhar: ${parseFloat(ifDearWins) >= 0 ? '+' : ''}$${ifDearWins}`,
       ``,
-      simulate
-        ? `⚠️ SIMULAÇÃO — execute manualmente no Polymarket se quiser.`
-        : `✅ ORDER ENVIADA — aguardando resultado.`,
+      `📊 Combinado: ${(combined*100).toFixed(0)}¢`,
+      simulate ? `\n🔗 ${marketLink(market)}` : `\n✅ Ordens enviadas automaticamente.`,
     ].join('\n')
   );
-
-  // Schedule settlement check
-  const waitMs = Math.max(5000, endMs - Date.now() + 8000);
-  setTimeout(() => {
-    settleScalperTrade({ tokenId, asset: asset.toUpperCase(), side: side!, entryPrice, simulate, tradeTimestamp: timestamp })
-      .catch(err => console.error(`[Scalper] Settle error: ${err.message}`));
-  }, waitMs);
 }
 
 // ── Entry point ────────────────────────────────────────────────────────────
 export async function startLastMinuteScalper(simulate: boolean): Promise<void> {
-  const assets = ASSETS.length > 0 ? ASSETS : config.markets;
-  console.error(`[Scalper] Iniciando — assets: ${assets.join(',')} | janela: ${WINDOW_SEC}s | entrada: ${ENTRY_MIN*100}-${ENTRY_MAX*100}¢`);
+  const client = createClobClient();
+  console.error(
+    `[Scalper] Iniciando — 5m: ${ASSETS_5M.join(',')} | 15m: ${ASSETS_15M.join(',')} | hedge quando ≤${IMBALANCE_MIN*100}¢`
+  );
 
-  // Prevent memory leak on long-running sessions
   setInterval(() => {
-    if (enteredMarkets.size > 500) enteredMarkets.clear();
+    if (enteredRounds.size > 1000) enteredRounds.clear();
   }, 60 * 60 * 1000);
 
   while (true) {
-    for (const asset of assets) {
-      try {
-        await scanAsset(asset, simulate);
-      } catch (err) {
-        console.error(`[Scalper][${asset}] Erro: ${(err as Error).message}`);
-      }
-      await sleep(800);
-    }
+    const tasks = [
+      ...ASSETS_5M.map(a  => scanAndEnter(a,  5,  simulate, client)),
+      ...ASSETS_15M.map(a => scanAndEnter(a, 15, simulate, client)),
+    ];
+    await Promise.allSettled(tasks);
     await sleep(SCAN_MS);
   }
 }

@@ -32,6 +32,24 @@ export interface ScalperTrade {
   pnl: number | null;
 }
 
+export interface ValueBetEntry {
+  conditionId: string;
+  question: string;
+  questionPT: string;
+  slug: string;
+  eventSlug: string;
+  marketProb: number;
+  aiProb: number;
+  edge: number;
+  confidence: number;
+  reasoning: string;
+  liquidity: number;
+  daysToEnd: number;
+  recommendation: 'BUY_YES' | 'BUY_NO';
+  simulate: boolean;
+  timestamp: string;
+}
+
 interface BotStore {
   startedAt: string;
   markets: string[];
@@ -43,6 +61,8 @@ interface BotStore {
   scalperProfit: number;
   walletBalance: number | null;
   walletUpdatedAt: string | null;
+  valueBets: ValueBetEntry[];
+  lastScanAt: string | null;
 }
 
 export const store: BotStore = {
@@ -56,6 +76,8 @@ export const store: BotStore = {
   scalperProfit: 0,
   walletBalance: null,
   walletUpdatedAt: null,
+  valueBets: [],
+  lastScanAt: null,
 };
 
 export function updatePrice(asset: string, side: 'up' | 'down', price: number): void {

@@ -1,10 +1,11 @@
 import { config } from './config';
-import { createClobClient, findActive15mMarket, getWalletBalance } from './api';
+import { createClobClient, findActive15mMarket, getWalletBalance, nextRoundEndMs } from './api';
 import { runDumpHedgeCycle } from './dumpHedgeTrader';
 import { log } from './logger';
 import { startDashboard } from './dashboard';
 import { store } from './store';
 import { startLastMinuteScalper } from './lastMinuteScalper';
+import { startPhase2 } from './phase2/phase2Runner';
 import { sendStartupEmail } from './notifier';
 
 function sleep(ms: number): Promise<void> {
@@ -30,23 +31,27 @@ async function runAssetMonitor(asset: string): Promise<void> {
       continue;
     }
 
-    const roundEnd = new Date(market.endDate).getTime();
+    // Use real 15-minute round boundary (ET-aligned), not the Gamma API's overall endDate
+    const roundEnd = nextRoundEndMs(15);
     const now = Date.now();
 
     if (roundEnd - now < 2 * 60 * 1000) {
       log('INFO', `Round for ${asset} ending soon, waiting for next round`);
-      const wait = Math.min(Math.max(0, roundEnd - now + 5_000), 5 * 60 * 1000);
+      const wait = Math.min(Math.max(5_000, roundEnd - now + 5_000), 5 * 60 * 1000);
       await sleep(wait);
       continue;
     }
 
     try {
-      await runDumpHedgeCycle(client, market, asset, isSimulation);
+      await runDumpHedgeCycle(client, market, asset, isSimulation, roundEnd);
     } catch (err) {
       log('ERROR', `Cycle error for ${asset}`, { error: (err as Error).message });
     }
 
-    const waitMs = Math.min(Math.max(0, roundEnd - Date.now() + 5_000), 20 * 60 * 1000);
+    const timeLeftMs = roundEnd - Date.now();
+    const waitMs = timeLeftMs > 30_000
+      ? 15_000
+      : Math.min(Math.max(5_000, timeLeftMs + 5_000), 20 * 60 * 1000);
     await sleep(waitMs);
   }
 }
@@ -86,6 +91,8 @@ async function main(): Promise<void> {
   await Promise.all([
     ...config.markets.map(asset => runAssetMonitor(asset)),
     startLastMinuteScalper(isSimulation),
+    // Phase 2 desativada — opera mercados de longo prazo, não 5 minutos
+    // startPhase2(isSimulation),
     watchWalletBalance(),
   ]);
 }

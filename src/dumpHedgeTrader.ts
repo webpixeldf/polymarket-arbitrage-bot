@@ -15,7 +15,8 @@ export async function runDumpHedgeCycle(
   client: ClobClient,
   market: GammaMarket,
   asset: string,
-  simulate: boolean
+  simulate: boolean,
+  roundEndMs?: number
 ): Promise<void> {
   const tokenIds: string[] = JSON.parse(market.clobTokenIds);
   const [upTokenId, downTokenId] = tokenIds; // index 0 = Up, index 1 = Down
@@ -28,11 +29,15 @@ export async function runDumpHedgeCycle(
   const startTime = Date.now();
   const windowMs = config.dumpHedgeWindowMinutes * 60 * 1000;
   const stopLossMs = config.dumpHedgeStopLossMaxWaitMinutes * 60 * 1000;
-  const roundEndMs = new Date(market.endDate).getTime();
+  const endMs = roundEndMs ?? new Date(market.endDate).getTime();
 
-  console.error(`[${asset.toUpperCase()}] Round started — ends ${market.endDateIso}`);
+  const endLocal = new Date(endMs).toLocaleTimeString('pt-BR');
+  console.error(`[${asset.toUpperCase()}] Round started — ends ${endLocal}`);
 
-  while (Date.now() < roundEndMs) {
+  let nullStreak = 0;
+  const NULL_STREAK_LIMIT = 30; // 30s consecutivos sem preço = round terminou
+
+  while (Date.now() < endMs) {
     const elapsed = Date.now() - startTime;
 
     const [upAsk, downAsk] = await Promise.all([
@@ -41,9 +46,15 @@ export async function runDumpHedgeCycle(
     ]);
 
     if (upAsk === null || downAsk === null) {
+      nullStreak++;
+      if (nullStreak >= NULL_STREAK_LIMIT) {
+        console.error(`[${asset.toUpperCase()}] Order book vazio por ${NULL_STREAK_LIMIT}s — round encerrado, aguardando próximo.`);
+        break;
+      }
       await sleep(config.checkIntervalMs);
       continue;
     }
+    nullStreak = 0;
 
     // LEG 1: detect dump, buy dumped leg
     if (!leg1.filled && elapsed <= windowMs) {

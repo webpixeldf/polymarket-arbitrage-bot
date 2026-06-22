@@ -87,6 +87,15 @@ export async function buyShares(
   }
 }
 
+// Polymarket crypto rounds end on exact minute boundaries in ET (UTC-4 in summer)
+export function nextRoundEndMs(roundMinutes: number): number {
+  const ET_OFFSET_MS = 4 * 60 * 60 * 1000; // ET = UTC-4
+  const nowET = Date.now() - ET_OFFSET_MS;
+  const roundMs = roundMinutes * 60 * 1000;
+  const elapsed = nowET % roundMs;
+  return Date.now() + (roundMs - elapsed);
+}
+
 export async function getWalletBalance(client: ClobClient): Promise<number | null> {
   try {
     const resp = await (client as any).getBalance();
