@@ -4,6 +4,7 @@ import { log } from './logger';
 import { startDashboard } from './dashboard';
 import { store } from './store';
 import { startConvergenceScalper } from './convergenceScalper';
+import { startFinanceScanner } from './financeScanner';
 import { sendStartupEmail } from './notifier';
 
 function sleep(ms: number): Promise<void> {
@@ -49,6 +50,7 @@ async function main(): Promise<void> {
 
   await Promise.all([
     startConvergenceScalper(isSimulation),
+    startFinanceScanner(isSimulation),
     watchWalletBalance(),
   ]);
 }
