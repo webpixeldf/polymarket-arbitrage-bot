@@ -211,17 +211,34 @@ async function settle(params: {
 }
 
 // ── Ciclo principal ─────────────────────────────────────────────────────────
+async function fetchAllMarkets(): Promise<any[]> {
+  const all: any[] = [];
+  let offset = 0;
+  const limit = 100;
+  while (true) {
+    try {
+      const resp = await axios.get(`${config.gammaApiUrl}/markets`, {
+        params: { active: true, limit, offset, order: 'volume', ascending: false },
+        timeout: 15000,
+      });
+      const batch: any[] = resp.data ?? [];
+      all.push(...batch);
+      if (batch.length < limit || all.length >= 600) break;
+      offset += limit;
+      await sleep(400);
+    } catch (err) {
+      console.error(`[Multi] Erro ao buscar mercados (offset ${offset}): ${(err as Error).message}`);
+      break;
+    }
+  }
+  return all;
+}
+
 async function scanAll(simulate: boolean, client: ReturnType<typeof createClobClient>): Promise<void> {
-  // 1. Todos os mercados ativos (ordenados por volume)
-  let allMarkets: any[] = [];
-  try {
-    const resp = await axios.get(`${config.gammaApiUrl}/markets`, {
-      params: { active: true, limit: 500, order: 'volume', ascending: false },
-      timeout: 15000,
-    });
-    allMarkets = resp.data ?? [];
-  } catch (err) {
-    console.error(`[Multi] Erro ao buscar mercados: ${(err as Error).message}`);
+  // 1. Todos os mercados ativos com paginação (até 600)
+  const allMarkets = await fetchAllMarkets();
+  if (allMarkets.length === 0) {
+    console.error('[Multi] Nenhum mercado retornado pela API');
     return;
   }
 
