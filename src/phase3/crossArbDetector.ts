@@ -1,14 +1,14 @@
 import { KalshiMarket, kalshiYesPrice } from './kalshiApi';
 import { EventMarket } from '../phase2/marketScanner';
 
-// Minimum price divergence to flag (e.g. 0.07 = 7%)
-const MIN_DIVERGENCE = parseFloat(process.env.KALSHI_MIN_DIVERGENCE ?? '0.07');
+// Minimum price divergence to flag
+const MIN_DIVERGENCE = parseFloat(process.env.KALSHI_MIN_DIVERGENCE ?? '0.05');   // 5%
 
 // Minimum keyword overlap score to consider markets as matching (0-1)
-const MIN_MATCH_SCORE = parseFloat(process.env.KALSHI_MIN_MATCH ?? '0.30');
+const MIN_MATCH_SCORE = parseFloat(process.env.KALSHI_MIN_MATCH ?? '0.20');        // 20%
 
 // Minimum Polymarket liquidity ($) to be worth trading
-const MIN_POLY_LIQUIDITY = parseFloat(process.env.KALSHI_MIN_LIQUIDITY ?? '2000');
+const MIN_POLY_LIQUIDITY = parseFloat(process.env.KALSHI_MIN_LIQUIDITY ?? '500'); // $500
 
 export interface CrossArbOpportunity {
   kalshiTicker: string;
