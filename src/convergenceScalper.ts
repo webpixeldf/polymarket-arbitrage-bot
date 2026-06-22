@@ -136,11 +136,13 @@ function calcScore(
   trend: TrendResult,
   ob: { spread: number | null; liquidityAtAsk: number; askLevels: number; bidLevels: number }
 ): ScoreBreakdown {
-  // 1. Posição do preço (25 pts)
+  // 1. Posição do preço (25 pts) — calibrado para faixa 65-95¢
   let pricePos = 0;
-  if (price >= 0.83 && price <= 0.88)                             pricePos = 25;
-  else if ((price >= 0.81 && price < 0.83) || (price > 0.88 && price <= 0.90)) pricePos = 17;
-  else                                                             pricePos = 8;
+  if      (price >= 0.83 && price <= 0.88)                                          pricePos = 25;
+  else if ((price >= 0.79 && price < 0.83) || (price > 0.88 && price <= 0.91))     pricePos = 20;
+  else if ((price >= 0.74 && price < 0.79) || (price > 0.91 && price <= 0.94))     pricePos = 14;
+  else if ((price >= 0.65 && price < 0.74) || (price > 0.94 && price <= 0.97))     pricePos = 8;
+  else                                                                               pricePos = 3;
 
   // 2. Estabilidade de tendência (20 pts)
   const trendPts = trend.trendScore;
@@ -296,11 +298,41 @@ async function settle(params: {
     pnl = shares * (exitPrice - entryPrice);
     won = pnl > 0;
   } else {
-    // Aguarda resolução e verifica preço final
-    await sleep(8000);
-    const ob = await getOrderBookData(tokenId);
-    const fp = ob.bestAsk;
-    won = fp !== null && fp >= 0.95;
+    // Aguarda resolução e verifica resultado via Gamma API
+    await sleep(25000);
+    let wonResult: boolean | null = null;
+
+    // Método 1: Gamma API — campo outcomePrices (["1","0"] ou ["0","1"])
+    try {
+      const resp = await axios.get(`${config.gammaApiUrl}/markets`, {
+        params: { conditionId: marketId, limit: 1 },
+        timeout: 8000,
+      });
+      const markets = Array.isArray(resp.data) ? resp.data : [];
+      const m = markets.find((x: any) => x.conditionId === marketId) ?? markets[0];
+      if (m?.outcomePrices) {
+        const prices = typeof m.outcomePrices === 'string'
+          ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+        const upP  = parseFloat(prices[0]);
+        const dnP  = parseFloat(prices[1]);
+        if (!isNaN(upP) && !isNaN(dnP)) {
+          wonResult = side === 'UP' ? upP > dnP : dnP > upP;
+          console.error(`[Convergence][${asset}] 📡 Gamma: UP=${(upP*100).toFixed(0)}¢ DOWN=${(dnP*100).toFixed(0)}¢ → ${wonResult ? 'WIN' : 'LOSS'}`);
+        }
+      }
+    } catch {}
+
+    // Método 2: CLOB bestBid — vencedor tem bids perto de $1, perdedor perto de $0
+    if (wonResult === null) {
+      const ob = await getOrderBookData(tokenId);
+      const bid = ob.bestBid;
+      if (bid !== null) {
+        wonResult = bid >= 0.80;
+        console.error(`[Convergence][${asset}] 📡 CLOB bid fallback: ${(bid*100).toFixed(0)}¢ → ${wonResult ? 'WIN' : 'LOSS'}`);
+      }
+    }
+
+    won = wonResult ?? false;
     resolvedExitPrice = won ? 1.0 : 0.0;
     pnl = won ? BET_USDC * (1 / entryPrice - 1) : -BET_USDC;
   }
@@ -510,7 +542,14 @@ async function scanAsset(
   );
 
   if (!simulate) {
-    await buyShares(client, dominantToken, dominantPrice, shares, false);
+    const orderId = await buyShares(client, dominantToken, dominantPrice, shares, false);
+    if (!orderId) {
+      console.error(`[Convergence][${asset}] ⚠️  FOK cancelado (sem contraparte) — aguarda próximo round`);
+      enteredRounds.delete(roundKey);
+      activePositions--;
+      return;
+    }
+    console.error(`[Convergence][${asset}] 📝 Ordem aceita: ${orderId}`);
   }
 
   store.scalperTrades.unshift({
