@@ -87,6 +87,17 @@ export async function buyShares(
   }
 }
 
+export async function getWalletBalance(client: ClobClient): Promise<number | null> {
+  try {
+    const resp = await (client as any).getBalance();
+    const raw = resp?.balance ?? resp?.collateral ?? resp;
+    const num = parseFloat(String(raw));
+    return isNaN(num) ? null : num;
+  } catch {
+    return null;
+  }
+}
+
 export async function redeemWinnings(
   client: ClobClient,
   conditionId: string,
