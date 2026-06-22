@@ -1,4 +1,4 @@
-import { fetchKalshiMarkets } from './kalshiApi';
+import { fetchManifoldMarkets } from './manifoldApi';
 import { detectCrossArbOpportunities, formatCrossArbAlert, CrossArbOpportunity } from './crossArbDetector';
 import { scanEventMarkets } from '../phase2/marketScanner';
 import { notify } from '../notifier';
@@ -16,7 +16,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 function shouldAlert(opp: CrossArbOpportunity): boolean {
-  const key = `${opp.kalshiTicker}:${opp.polyConditionId}`;
+  const key = `${opp.refId}:${opp.polyConditionId}`;
   const last = alertedAt[key] ?? 0;
   if (Date.now() - last < ALERT_COOLDOWN_MS) return false;
   alertedAt[key] = Date.now();
@@ -25,40 +25,30 @@ function shouldAlert(opp: CrossArbOpportunity): boolean {
 
 async function runCrossArbCycle(simulate: boolean): Promise<void> {
   cycleCount++;
-  console.error(`[Phase3] Ciclo #${cycleCount} — Kalshi × Polymarket`);
+  console.error(`[Phase3] Ciclo #${cycleCount} — Manifold × Polymarket`);
 
-  const [kalshiMarkets, polyMarkets] = await Promise.all([
-    fetchKalshiMarkets(),
+  const [refMarkets, polyMarkets] = await Promise.all([
+    fetchManifoldMarkets(),
     scanEventMarkets(),
   ]);
 
   store.lastCrossArbScanAt = new Date().toISOString();
 
-  // === KALSHI INDISPONÍVEL ===
-  if (kalshiMarkets.length === 0) {
-    console.error('[Phase3] Kalshi retornou 0 mercados — API offline ou bloqueada por IP.');
+  if (refMarkets.length === 0) {
+    console.error('[Phase3] Manifold retornou 0 mercados.');
     await notify(
-      `⚠️ Fase 3 — Ciclo #${cycleCount}: Kalshi indisponível`,
-      [
-        `🔀 DIAGNÓSTICO FASE 3 — Ciclo #${cycleCount}`,
-        ``,
-        `❌ Kalshi: 0 mercados retornados`,
-        `   A API pode estar offline ou bloqueada por IP do servidor.`,
-        ``,
-        `📊 Polymarket: ${polyMarkets.length} mercados escaneados`,
-        ``,
-        `Próxima tentativa em 10 minutos.`,
-      ].join('\n')
+      `⚠️ Fase 3 — Ciclo #${cycleCount}: Manifold indisponível`,
+      `❌ Manifold API retornou 0 mercados.\nPolymarket: ${polyMarkets.length} mercados escaneados.\nPróxima tentativa em 10 minutos.`
     );
     return;
   }
 
-  const opportunities = detectCrossArbOpportunities(kalshiMarkets, polyMarkets);
+  const opportunities = detectCrossArbOpportunities(refMarkets, polyMarkets);
 
   store.crossArbOpportunities = opportunities.slice(0, 20).map(opp => ({
-    kalshiTicker: opp.kalshiTicker,
-    kalshiTitle: opp.kalshiTitle,
-    kalshiProb: opp.kalshiProb,
+    kalshiTicker: opp.refId,
+    kalshiTitle: opp.refTitle,
+    kalshiProb: opp.refProb,
     polyQuestion: opp.polyQuestion,
     polyEventSlug: opp.polyEventSlug,
     polyProb: opp.polyProb,
@@ -69,55 +59,51 @@ async function runCrossArbCycle(simulate: boolean): Promise<void> {
     timestamp: opp.timestamp,
   }));
 
-  console.error(
-    `[Phase3] Kalshi: ${kalshiMarkets.length} | Poly: ${polyMarkets.length} | Oportunidades: ${opportunities.length}`
-  );
+  console.error(`[Phase3] Manifold: ${refMarkets.length} | Poly: ${polyMarkets.length} | Oportunidades: ${opportunities.length}`);
 
-  // === DIAGNÓSTICO NOS PRIMEIROS 3 CICLOS OU SE NÃO ENCONTROU NADA ===
+  // Diagnóstico nos primeiros 3 ciclos ou quando não encontra nada
   if (cycleCount <= 3 || opportunities.length === 0) {
-    const kalshiSample = kalshiMarkets.slice(0, 5).map((m, i) =>
-      `  K${i+1}. ${m.title.slice(0, 60)} [${m.ticker}]`
+    const refSample = refMarkets.slice(0, 5).map((m, i) =>
+      `  M${i+1}. ${m.question.slice(0, 65)} [${(m.probability*100).toFixed(0)}%]`
     );
     const polySample = polyMarkets.slice(0, 5).map((m, i) =>
-      `  P${i+1}. ${m.question.slice(0, 60)}`
+      `  P${i+1}. ${m.question.slice(0, 65)} [${m.probability.toFixed(0)}%]`
     );
     const topMatches = opportunities.slice(0, 3).map((o, i) =>
-      `  ${i+1}. Poly: "${o.polyQuestion.slice(0, 40)}"\n     Kalshi: "${o.kalshiTitle.slice(0, 40)}"\n     Div: ${(o.divergence*100).toFixed(1)}% | Match: ${(o.matchScore*100).toFixed(0)}% | Poly $${o.polyLiquidity.toFixed(0)}`
+      `  ${i+1}. "${o.polyQuestion.slice(0, 45)}"\n     Manifold: ${(o.refProb*100).toFixed(1)}% | Poly: ${(o.polyProb*100).toFixed(1)}% | Div: ${(o.divergence*100).toFixed(1)}% | Match: ${(o.matchScore*100).toFixed(0)}%`
     );
 
     await notify(
-      `🔀 Fase 3 — Ciclo #${cycleCount}: ${opportunities.length} oportunidades`,
+      `🔀 Fase 3 — Ciclo #${cycleCount}: ${opportunities.length} oportunidades (Manifold × Poly)`,
       [
         `🔀 DIAGNÓSTICO FASE 3 — Ciclo #${cycleCount}`,
         ``,
-        `✅ Kalshi: ${kalshiMarkets.length} mercados ativos`,
+        `✅ Manifold: ${refMarkets.length} mercados ativos`,
         `📊 Polymarket: ${polyMarkets.length} mercados escaneados`,
         `💡 Oportunidades encontradas: ${opportunities.length}`,
         ``,
-        `📋 Amostra Kalshi (primeiros 5):`,
-        kalshiSample.join('\n'),
+        `📋 Amostra Manifold (top 5 liquidez):`,
+        refSample.join('\n'),
         ``,
-        `📋 Amostra Polymarket (top 5 liquidez):`,
+        `📋 Amostra Polymarket (top 5):`,
         polySample.join('\n'),
         ``,
         opportunities.length > 0
           ? `🎯 Melhores pares:\n${topMatches.join('\n\n')}`
-          : `⚪ Sem pares com divergência ≥ 5%, match ≥ 20% e liquidez ≥ $500`,
+          : `⚪ Sem pares com divergência ≥ 5%, similaridade ≥ 20% e liquidez ≥ $500`,
         ``,
         `Próximo ciclo em 10 minutos.`,
       ].join('\n')
     );
   }
 
-  // === ALERTAS DE OPORTUNIDADE ===
   let alertsSent = 0;
   for (const opp of opportunities) {
     if (alertsSent >= MAX_ALERTS_PER_CYCLE) break;
     if (!shouldAlert(opp)) continue;
-
     const { subject, body } = formatCrossArbAlert(opp, simulate);
     await notify(subject, body);
-    console.error(`[Phase3] Alerta enviado: ${opp.polyQuestion.slice(0, 60)} | Div: ${(opp.divergence*100).toFixed(1)}%`);
+    console.error(`[Phase3] Alerta: ${opp.polyQuestion.slice(0, 60)} | Div: ${(opp.divergence*100).toFixed(1)}%`);
     alertsSent++;
     await sleep(1500);
   }
@@ -125,17 +111,14 @@ async function runCrossArbCycle(simulate: boolean): Promise<void> {
 
 export async function startPhase3(simulate: boolean): Promise<void> {
   await sleep(2 * 60 * 1000);
-  console.error('[Phase3] Iniciando — Cross-platform arbitrage: Kalshi × Polymarket');
+  console.error('[Phase3] Iniciando — Cross-platform arbitrage: Manifold × Polymarket');
 
   while (true) {
     try {
       await runCrossArbCycle(simulate);
     } catch (err) {
-      console.error('[Phase3] Erro no ciclo:', (err as Error).message);
-      await notify(
-        '❌ Fase 3 — Erro no ciclo',
-        `Erro: ${(err as Error).message}\n\nPróxima tentativa em 10 minutos.`
-      );
+      console.error('[Phase3] Erro:', (err as Error).message);
+      await notify('❌ Fase 3 — Erro', `${(err as Error).message}\n\nPróxima tentativa em 10 minutos.`);
     }
     await sleep(SCAN_INTERVAL_MS);
   }

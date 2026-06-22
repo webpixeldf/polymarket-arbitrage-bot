@@ -286,14 +286,14 @@ function html(): string {
 
 
   <div class="section-header" style="margin-top:8px">
-    <h2>🔀 Fase 3 — Arbitragem Cross-Platform (Kalshi × Polymarket)</h2>
+    <h2>🔀 Fase 3 — Arbitragem Cross-Platform (Manifold × Polymarket)</h2>
     <span class="phase-badge">${store.lastCrossArbScanAt ? 'Último scan: ' + new Date(store.lastCrossArbScanAt).toLocaleTimeString('pt-BR') : 'Aguardando primeiro scan...'} • atualiza a cada 10 min</span>
   </div>
 
   ${store.crossArbOpportunities.length === 0
     ? store.lastCrossArbScanAt
-      ? `<div class="empty-state">⚪ Ciclo concluído — nenhum par Kalshi × Polymarket com divergência ≥ 5% encontrado.<br><span class="muted" style="font-size:0.8rem">Verifique o diagnóstico no Telegram para detalhes. Próximo scan em ~10 min.</span></div>`
-      : `<div class="empty-state">⏳ Aguardando primeiro ciclo (inicia 2 min após o bot subir)...<br><span class="muted" style="font-size:0.8rem">Compara preços Kalshi vs Polymarket. Divergência ≥ 5% dispara alerta.</span></div>`
+      ? `<div class="empty-state">⚪ Ciclo concluído — nenhum par Manifold × Polymarket com divergência ≥ 5% encontrado.<br><span class="muted" style="font-size:0.8rem">Verifique o diagnóstico no Telegram para detalhes. Próximo scan em ~10 min.</span></div>`
+      : `<div class="empty-state">⏳ Aguardando primeiro ciclo (inicia 2 min após o bot subir)...<br><span class="muted" style="font-size:0.8rem">Compara preços Manifold vs Polymarket. Divergência ≥ 5% dispara alerta.</span></div>`
     : `<table>
     <thead><tr>
       <th>Kalshi (referência)</th>
@@ -321,7 +321,7 @@ function html(): string {
           <td style="font-size:0.78rem">
             <a href="https://polymarket.com/event/${opp.polyEventSlug}" target="_blank" style="color:#6366f1">Poly</a>
             &nbsp;·&nbsp;
-            <a href="https://kalshi.com/markets/${opp.kalshiTicker}" target="_blank" style="color:#8b5cf6">Kalshi</a>
+            <a href="https://manifold.markets/market/${opp.kalshiTicker}" target="_blank" style="color:#8b5cf6">Manifold</a>
           </td>
         </tr>`;
       }).join('')}
