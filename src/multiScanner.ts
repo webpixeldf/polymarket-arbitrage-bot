@@ -367,9 +367,10 @@ async function scanAll(simulate: boolean, client: ReturnType<typeof createClobCl
     );
 
     if (!simulate) {
-      const orderId = await buyShares(client, tokenId, entryPrice, shares, false);
+      // slippage de 3¢ para absorver movimentação entre leitura e execução
+      const orderId = await buyShares(client, tokenId, entryPrice, shares, false, 0.03);
       if (!orderId) {
-        console.error(`[Multi] ⚠️  FOK cancelado: ${label}`);
+        console.error(`[Multi] ⚠️  FOK cancelado (sem contraparte): ${label}`);
         entered.delete(key);
         continue;
       }

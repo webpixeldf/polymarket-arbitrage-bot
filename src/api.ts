@@ -137,19 +137,21 @@ export async function buyShares(
   tokenId: string,
   price: number,
   shares: number,
-  simulate: boolean
+  simulate: boolean,
+  slippage: number = 0   // tolerância máxima acima do preço lido (ex: 0.03 = 3¢)
 ): Promise<string | null> {
   if (simulate) {
     console.error(`[SIM] BUY ${shares} shares @ ${price.toFixed(4)} token=${tokenId}`);
     return 'sim-order-id';
   }
   try {
-    // FOK = Fill or Kill (market order — fills immediately or cancels)
+    // FOK com slippage: aceita pagar até price+slippage para garantir execução
+    const orderPrice = parseFloat(Math.min(price + slippage, 0.99).toFixed(4));
     const resp = await client.createAndPostMarketOrder({
       tokenID: tokenId,
-      price,
-      amount: shares,
-      side: Side.BUY,
+      price  : orderPrice,
+      amount : shares,
+      side   : Side.BUY,
     }, undefined, OrderType.FOK);
     return (resp as any).orderID ?? null;
   } catch (err) {
