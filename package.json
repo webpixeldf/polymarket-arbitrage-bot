@@ -11,7 +11,8 @@
     "sim": "ts-node src/main.ts --simulation",
     "prod": "node dist/main.js --production",
     "start": "node dist/main.js",
-    "backtest": "ts-node src/backtest.ts"
+    "backtest": "ts-node src/backtest.ts",
+    "setup": "ts-node src/setup.ts"
   },
   "dependencies": {
     "@polymarket/clob-client": "^4.0.0",

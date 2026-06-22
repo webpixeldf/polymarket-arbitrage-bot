@@ -6,11 +6,14 @@ import { GammaMarket, OrderBook } from './models';
 
 export function createClobClient(): ClobClient {
   const wallet = new ethers.Wallet(config.privateKey);
+  const creds = (config.apiKey && config.apiSecret && config.apiPassphrase)
+    ? { key: config.apiKey, secret: config.apiSecret, passphrase: config.apiPassphrase }
+    : undefined;
   return new ClobClient(
     config.clobApiUrl,
     137,
     wallet,
-    undefined,
+    creds as any,
     config.signatureType,
     config.proxyWalletAddress
   );
