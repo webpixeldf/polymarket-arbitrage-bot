@@ -62,6 +62,20 @@ export interface OrderEntry {
   simulate: boolean;
 }
 
+export interface CrossArbEntry {
+  kalshiTicker: string;
+  kalshiTitle: string;
+  kalshiProb: number;
+  polyQuestion: string;
+  polyEventSlug: string;
+  polyProb: number;
+  divergence: number;
+  recommendation: 'BUY_YES' | 'BUY_NO';
+  matchScore: number;
+  polyLiquidity: number;
+  timestamp: string;
+}
+
 interface BotStore {
   startedAt: string;
   markets: string[];
@@ -73,6 +87,8 @@ interface BotStore {
   totalProfit: number;
   simulate: boolean;
   lastScanAt: string | null;
+  crossArbOpportunities: CrossArbEntry[];
+  lastCrossArbScanAt: string | null;
 }
 
 export const store: BotStore = {
@@ -86,6 +102,8 @@ export const store: BotStore = {
   totalProfit: 0,
   simulate: true,
   lastScanAt: null,
+  crossArbOpportunities: [],
+  lastCrossArbScanAt: null,
 };
 
 export function updatePrice(asset: string, side: 'up' | 'down', price: number): void {

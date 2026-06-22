@@ -183,6 +183,10 @@ function html(): string {
       <div class="value" style="color:#f59e0b">${valueBets.length}</div>
     </div>
     <div class="card">
+      <div class="label">Cross-Arb (Fase 3)</div>
+      <div class="value" style="color:#a78bfa">${store.crossArbOpportunities.length}</div>
+    </div>
+    <div class="card">
       <div class="label">Stop-losses</div>
       <div class="value" style="color:#f87171">${trades.filter(t => t.mode === 'stop-loss').length}</div>
     </div>
@@ -275,6 +279,48 @@ function html(): string {
           <td style="font-weight:600;color:${edgeColor}">${m.edge > 0 ? '+' : ''}${m.edge.toFixed(1)}%</td>
           <td class="muted">${m.confidence.toFixed(0)}%</td>
           <td>${status}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>`}
+
+
+  <div class="section-header" style="margin-top:8px">
+    <h2>🔀 Fase 3 — Arbitragem Cross-Platform (Kalshi × Polymarket)</h2>
+    <span class="phase-badge">${store.lastCrossArbScanAt ? 'Último scan: ' + new Date(store.lastCrossArbScanAt).toLocaleTimeString('pt-BR') : 'Aguardando primeiro scan...'} • atualiza a cada 10 min</span>
+  </div>
+
+  ${store.crossArbOpportunities.length === 0
+    ? `<div class="empty-state">⏳ Aguardando primeiro ciclo de arbitragem cross-platform (inicia 2 min após o bot subir)...<br><span class="muted" style="font-size:0.8rem">Compara preços Kalshi vs Polymarket. Quando Kalshi e Poly divergem &gt;7%, é sinal de oportunidade.</span></div>`
+    : `<table>
+    <thead><tr>
+      <th>Kalshi (referência)</th>
+      <th>Polymarket (pergunta)</th>
+      <th>Kalshi %</th>
+      <th>Poly %</th>
+      <th>Divergência</th>
+      <th>Recomendação</th>
+      <th>Similaridade</th>
+      <th>Links</th>
+    </tr></thead>
+    <tbody>
+      ${store.crossArbOpportunities.map(opp => {
+        const absDiv = Math.abs(opp.divergence * 100);
+        const divColor = absDiv >= 15 ? '#4ade80' : absDiv >= 10 ? '#f59e0b' : '#94a3b8';
+        const recColor = opp.recommendation === 'BUY_YES' ? '#4ade80' : '#f87171';
+        return `<tr>
+          <td style="font-size:0.78rem;max-width:200px;color:#94a3b8" title="${opp.kalshiTitle}">${opp.kalshiTitle.slice(0, 55)}${opp.kalshiTitle.length > 55 ? '…' : ''}</td>
+          <td style="font-size:0.8rem;max-width:260px" title="${opp.polyQuestion}">${opp.polyQuestion.slice(0, 65)}${opp.polyQuestion.length > 65 ? '…' : ''}</td>
+          <td class="${opp.kalshiProb >= 0.5 ? 'up' : 'down'}">${(opp.kalshiProb * 100).toFixed(1)}%</td>
+          <td class="${opp.polyProb >= 0.5 ? 'up' : 'down'}">${(opp.polyProb * 100).toFixed(1)}%</td>
+          <td style="font-weight:700;color:${divColor}">${opp.divergence > 0 ? '+' : ''}${(opp.divergence * 100).toFixed(1)}%</td>
+          <td style="font-weight:700;color:${recColor}">${opp.recommendation === 'BUY_YES' ? '✅ YES' : '❌ NO'}</td>
+          <td class="muted">${(opp.matchScore * 100).toFixed(0)}%</td>
+          <td style="font-size:0.78rem">
+            <a href="https://polymarket.com/event/${opp.polyEventSlug}" target="_blank" style="color:#6366f1">Poly</a>
+            &nbsp;·&nbsp;
+            <a href="https://kalshi.com/markets/${opp.kalshiTicker}" target="_blank" style="color:#8b5cf6">Kalshi</a>
+          </td>
         </tr>`;
       }).join('')}
     </tbody>

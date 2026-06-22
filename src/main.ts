@@ -9,6 +9,7 @@ import { log } from './logger';
 import { startDashboard } from './dashboard';
 import { store } from './store';
 import { startPhase2 } from './phase2/phase2Runner';
+import { startPhase3 } from './phase3/phase3Runner';
 import { sendStartupEmail } from './notifier';
 
 function sleep(ms: number): Promise<void> {
@@ -81,6 +82,7 @@ async function main(): Promise<void> {
   await Promise.all([
     ...config.markets.map(asset => runAssetMonitor(asset)),
     startPhase2(isSimulation),
+    startPhase3(isSimulation),
   ]);
 }
 
