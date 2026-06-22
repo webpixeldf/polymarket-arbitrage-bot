@@ -370,7 +370,8 @@ async function settle(params: {
 }
 
 // ── Per-asset state ────────────────────────────────────────────────────────
-const enteredRounds = new Set<string>();
+const enteredRounds  = new Set<string>();
+const scanCounters   = new Map<string, number>(); // heartbeat por asset
 
 // ── Main scan ──────────────────────────────────────────────────────────────
 async function scanAsset(
@@ -379,7 +380,14 @@ async function scanAsset(
   client: ReturnType<typeof createClobClient>
 ): Promise<void> {
   const market = await findMarket5m(asset);
-  if (!market) return;
+  if (!market) {
+    // Log a cada 12 ciclos (~1 min) para não spammar
+    const k = `${asset}-nf`;
+    const c = (scanCounters.get(k) ?? 0) + 1;
+    scanCounters.set(k, c);
+    if (c % 12 === 0) console.error(`[Convergence][${asset}] ⚠️  Mercado 5m não encontrado na API`);
+    return;
+  }
 
   const endMs    = nextRoundEndMs(5);
   const secsLeft = (endMs - Date.now()) / 1000;
@@ -391,7 +399,7 @@ async function scanAsset(
   } catch { return; }
   const [upTokenId, downTokenId] = tokenIds;
 
-  // Busca order book completo para ambos os lados (substitui getBestAsk × 2)
+  // Busca order book completo para ambos os lados
   const [upOb, downOb] = await Promise.all([
     getOrderBookData(upTokenId),
     getOrderBookData(downTokenId),
@@ -406,6 +414,21 @@ async function scanAsset(
   updatePrice(asset, 'down', downAsk);
   recordPrice(`${asset}-up`,   upAsk);
   recordPrice(`${asset}-down`, downAsk);
+
+  // Heartbeat a cada ~1 minuto: mostra o que o bot está vendo
+  const hk = `${asset}-hb`;
+  const hc = (scanCounters.get(hk) ?? 0) + 1;
+  scanCounters.set(hk, hc);
+  if (hc % 12 === 0) {
+    const dom  = upAsk >= downAsk ? 'UP' : 'DOWN';
+    const dom$ = (Math.max(upAsk, downAsk) * 100).toFixed(0);
+    const inWin = secsLeft >= WINDOW_MIN_SEC && secsLeft <= WINDOW_MAX_SEC;
+    console.error(
+      `[Convergence][${asset}] 👁  UP:${(upAsk*100).toFixed(0)}¢ DOWN:${(downAsk*100).toFixed(0)}¢ | ` +
+      `dom: ${dom}@${dom$}¢ | ${secsLeft.toFixed(0)}s p/ fim | janela: ${inWin ? '✅' : '❌'} | ` +
+      `trades hoje: ${dailyTrades}`
+    );
+  }
 
   // Janela de tempo
   if (secsLeft < WINDOW_MIN_SEC || secsLeft > WINDOW_MAX_SEC) return;
@@ -427,8 +450,17 @@ async function scanAsset(
   const dominantOb    = dominantSide === 'UP' ? upOb : downOb;
   const trendKey      = `${asset}-${dominantSide.toLowerCase()}`;
 
+  // Log sempre que estiver na janela (para diagnóstico)
+  console.error(
+    `[Convergence][${asset}] 🔍 ${dominantSide}@${(dominantPrice*100).toFixed(0)}¢ | ${secsLeft.toFixed(0)}s | ` +
+    `spread:${dominantOb.spread !== null ? (dominantOb.spread*100).toFixed(1) : '?'}¢ | liq:$${dominantOb.liquidityAtAsk.toFixed(1)}`
+  );
+
   // Faixa de preço
-  if (dominantPrice < ENTRY_MIN || dominantPrice > ENTRY_MAX) return;
+  if (dominantPrice < ENTRY_MIN || dominantPrice > ENTRY_MAX) {
+    console.error(`[Convergence][${asset}] ❌ Preço fora da faixa (${(dominantPrice*100).toFixed(0)}¢ | faixa: ${(ENTRY_MIN*100).toFixed(0)}-${(ENTRY_MAX*100).toFixed(0)}¢)`);
+    return;
+  }
 
   // Filtros de qualidade (liquidez, spread, profundidade)
   const quality = checkQuality({
@@ -438,27 +470,27 @@ async function scanAsset(
     askLevels     : dominantOb.askLevels,
   });
   if (!quality.ok) {
-    console.error(`[Convergence][${asset}] Qualidade: ${quality.reason}`);
+    console.error(`[Convergence][${asset}] ❌ Qualidade: ${quality.reason}`);
     return;
   }
 
   // Confirmação de tendência
   const trend = analyzeTrend(trendKey, dominantPrice);
   if (!trend.stable) {
-    console.error(`[Convergence][${asset}] Bloqueado — ${trend.reason}`);
+    console.error(`[Convergence][${asset}] ❌ Tendência: ${trend.reason}`);
     return;
   }
 
   // Score de qualidade (8 fatores)
   const scoreResult = calcScore(dominantPrice, secsLeft, trend, dominantOb);
   console.error(
-    `[Convergence][${asset}] ${dominantSide} @ ${(dominantPrice*100).toFixed(0)}¢ | ${secsLeft.toFixed(0)}s | ` +
-    `Score: ${scoreResult.total}/100 | spread: ${dominantOb.spread !== null ? (dominantOb.spread*100).toFixed(1) : '?'}¢ | ` +
-    `liq: $${dominantOb.liquidityAtAsk.toFixed(1)} | ${trend.reason}`
+    `[Convergence][${asset}] 📊 Score: ${scoreResult.total}/100 | ` +
+    `preço:${scoreResult.pricePos} tend:${scoreResult.trend} spread:${scoreResult.spreadPts} ` +
+    `liq:${scoreResult.liquidity} tempo:${scoreResult.timeWindow} vol:${scoreResult.volatility}`
   );
 
   if (scoreResult.total < MIN_SCORE) {
-    console.error(`[Convergence][${asset}] Score insuficiente (${scoreResult.total} < ${MIN_SCORE})`);
+    console.error(`[Convergence][${asset}] ❌ Score insuficiente (${scoreResult.total} < ${MIN_SCORE})`);
     return;
   }
 
