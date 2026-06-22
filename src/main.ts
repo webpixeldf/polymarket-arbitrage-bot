@@ -1,11 +1,8 @@
 import { config } from './config';
-import { createClobClient, findActive15mMarket, getWalletBalance, nextRoundEndMs } from './api';
-import { runDumpHedgeCycle } from './dumpHedgeTrader';
+import { createClobClient, getWalletBalance } from './api';
 import { log } from './logger';
 import { startDashboard } from './dashboard';
 import { store } from './store';
-import { startLastMinuteScalper } from './lastMinuteScalper';
-import { startPhase2 } from './phase2/phase2Runner';
 import { startConvergenceScalper } from './convergenceScalper';
 import { sendStartupEmail } from './notifier';
 
@@ -18,44 +15,6 @@ const isProduction =
 
 const isSimulation =
   process.argv.includes('--simulation') || !isProduction;
-
-async function runAssetMonitor(asset: string): Promise<void> {
-  const client = createClobClient();
-  log('INFO', `Starting monitor for ${asset.toUpperCase()}`, { simulate: isSimulation });
-
-  while (true) {
-    const market = await findActive15mMarket(asset);
-
-    if (!market) {
-      log('WARN', `No active 15m market for ${asset}, retrying in 30s`);
-      await sleep(30_000);
-      continue;
-    }
-
-    // Use real 15-minute round boundary (ET-aligned), not the Gamma API's overall endDate
-    const roundEnd = nextRoundEndMs(15);
-    const now = Date.now();
-
-    if (roundEnd - now < 2 * 60 * 1000) {
-      log('INFO', `Round for ${asset} ending soon, waiting for next round`);
-      const wait = Math.min(Math.max(5_000, roundEnd - now + 5_000), 5 * 60 * 1000);
-      await sleep(wait);
-      continue;
-    }
-
-    try {
-      await runDumpHedgeCycle(client, market, asset, isSimulation, roundEnd);
-    } catch (err) {
-      log('ERROR', `Cycle error for ${asset}`, { error: (err as Error).message });
-    }
-
-    const timeLeftMs = roundEnd - Date.now();
-    const waitMs = timeLeftMs > 30_000
-      ? 15_000
-      : Math.min(Math.max(5_000, timeLeftMs + 5_000), 20 * 60 * 1000);
-    await sleep(waitMs);
-  }
-}
 
 async function watchWalletBalance(): Promise<void> {
   const client = createClobClient();
@@ -71,10 +30,9 @@ async function watchWalletBalance(): Promise<void> {
 
 async function main(): Promise<void> {
   const mode = isSimulation ? 'SIMULATION' : 'PRODUCTION';
-  store.markets = config.markets;
   store.simulate = isSimulation;
   startDashboard();
-  log('INFO', `Bot starting in ${mode} mode`, { markets: config.markets });
+  log('INFO', `Bot starting in ${mode} mode`);
 
   if (isSimulation) {
     console.error('='.repeat(60));
@@ -90,8 +48,6 @@ async function main(): Promise<void> {
   await sendStartupEmail(isSimulation);
 
   await Promise.all([
-    ...config.markets.map(asset => runAssetMonitor(asset)),
-    startLastMinuteScalper(isSimulation),
     startConvergenceScalper(isSimulation),
     watchWalletBalance(),
   ]);
