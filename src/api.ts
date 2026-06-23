@@ -46,6 +46,9 @@ async function postOrderV5(order: any, orderType: 'FOK' | 'GTC'): Promise<any> {
         POLY_API_KEY:    config.apiKey,
         POLY_PASSPHRASE: config.apiPassphrase,
         'Content-Type':  'application/json',
+        'User-Agent':    '@polymarket/clob-client',
+        'Accept':        '*/*',
+        'Connection':    'keep-alive',
       },
       timeout: 10_000,
     });
