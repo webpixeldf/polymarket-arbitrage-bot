@@ -6,18 +6,18 @@ const { ethers } = require('ethers');
 const { createHmac } = require('crypto');
 
 async function test() {
+  // Busca mercado de alto volume — qualquer categoria, só precisa estar aberto
   const r = await axios.get('https://gamma-api.polymarket.com/markets', {
-    params: { active: true, limit: 300, order: 'endDate', ascending: false },
+    params: { active: true, limit: 50, order: 'volume', ascending: false },
     timeout: 15000,
   });
   const now = Date.now();
   const m = r.data.find(x =>
-    x.question &&
-    x.question.toLowerCase().includes('temperature') &&
-    x.endDate && new Date(x.endDate).getTime() > now
+    x.endDate && new Date(x.endDate).getTime() > now &&
+    x.clobTokenIds && x.clobTokenIds !== '[]'
   );
 
-  if (!m) { console.log('Nenhum mercado weather aberto'); return; }
+  if (!m) { console.log('Nenhum mercado aberto'); return; }
   const ids = JSON.parse(m.clobTokenIds);
   const tokenId = ids[0];
   console.log('Mercado:', m.question.slice(0, 70));
