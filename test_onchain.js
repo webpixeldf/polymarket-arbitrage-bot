@@ -60,34 +60,47 @@ async function main() {
   console.log(`Proxy tx count: ${proxyNonce}`);
   console.log(`EOA   tx count: ${eoaNonce}`);
 
-  // Verifica se EOA é operador aprovado para o proxy no CTF Exchange
+  // MATIC (gas) balance
+  const [maticProxy, maticEoa] = await Promise.all([
+    provider.getBalance(proxy).catch(() => ethers.BigNumber.from(0)),
+    provider.getBalance(EOA).catch(() => ethers.BigNumber.from(0)),
+  ]);
+  console.log('\n=== Saldo MATIC (gas) ===');
+  console.log(`Proxy MATIC: ${ethers.utils.formatEther(maticProxy)} MATIC`);
+  console.log(`EOA   MATIC: ${ethers.utils.formatEther(maticEoa)} MATIC`);
+
+  // Testa múltiplos ABIs para checar aprovação de operador
   const CTF_EXCHANGE = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
   const NEG_EXCHANGE = '0xC5d563A36AE78145C45a50134d48A1215220f80a';
-  const approvalAbi  = ['function isApprovedForAll(address owner, address operator) view returns (bool)'];
+  const CTF_TOKENS   = '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045'; // ConditionalTokens ERC1155
 
-  const ctf = new ethers.Contract(CTF_EXCHANGE, approvalAbi, provider);
-  const neg = new ethers.Contract(NEG_EXCHANGE, approvalAbi, provider);
+  console.log('\n=== Aprovação de operador (várias assinaturas) ===');
+  const checks = [
+    { contract: CTF_EXCHANGE, name: 'Exchange.isOperator(proxy,eoa)',     abi: 'function isOperator(address,address) view returns (bool)',     args: [proxy, EOA] },
+    { contract: CTF_EXCHANGE, name: 'Exchange.isApprovedForAll(proxy,eoa)',abi: 'function isApprovedForAll(address,address) view returns (bool)',args: [proxy, EOA] },
+    { contract: CTF_TOKENS,   name: 'CTF.isApprovedForAll(proxy,exchange)',abi: 'function isApprovedForAll(address,address) view returns (bool)',args: [proxy, CTF_EXCHANGE] },
+    { contract: NEG_EXCHANGE, name: 'negEx.isOperator(proxy,eoa)',         abi: 'function isOperator(address,address) view returns (bool)',     args: [proxy, EOA] },
+  ];
+  for (const c of checks) {
+    try {
+      const contract = new ethers.Contract(c.contract, [c.abi], provider);
+      const fn = Object.keys(contract.functions)[0];
+      const result = await contract[fn](...c.args);
+      console.log(`✅ ${c.name}: ${result}`);
+    } catch (e) {
+      console.log(`❌ ${c.name}: ${e.code || e.message.slice(0, 60)}`);
+    }
+  }
 
-  const [ctfApproved, negApproved] = await Promise.all([
-    ctf.isApprovedForAll(proxy, EOA).catch(() => 'ERRO'),
-    neg.isApprovedForAll(proxy, EOA).catch(() => 'ERRO'),
-  ]);
-  console.log('\n=== EOA aprovada como operador do Proxy? ===');
-  console.log(`CTF Exchange   (0x4bFb...): ${ctfApproved}`);
-  console.log(`negRisk Exchange (0xC5d5...): ${negApproved}`);
-
-  // Verifica allowance do proxy para o Exchange
-  const allowanceAbi = ['function allowance(address owner, address spender) view returns (uint256)'];
-  const usdcA  = new ethers.Contract(USDC,  allowanceAbi, provider);
-  const usdceA = new ethers.Contract(USDCe, allowanceAbi, provider);
-
-  const [al1, al2] = await Promise.all([
-    usdcA.allowance(proxy, CTF_EXCHANGE).catch(() => ethers.BigNumber.from(0)),
-    usdceA.allowance(proxy, CTF_EXCHANGE).catch(() => ethers.BigNumber.from(0)),
-  ]);
-  console.log('\n=== Allowance USDC do Proxy para CTF Exchange ===');
-  console.log(`USDC native: $${(al1 / 1e6).toFixed(2)}`);
-  console.log(`USDC.e:      $${(al2 / 1e6).toFixed(2)}`);
+  // Busca proxy via v5 API
+  console.log('\n=== Proxy wallet via v5 getProxyWallet ===');
+  try {
+    const v5 = await import('clob-v5');
+    const creds = { key: process.env.API_KEY, secret: process.env.API_SECRET, passphrase: process.env.API_PASSPHRASE };
+    const client = new v5.ClobClient('https://clob.polymarket.com', 137, new ethers.Wallet(process.env.PRIVATE_KEY), creds, 1, proxy);
+    const pw = await client.getProxyWallet(EOA);
+    console.log('getProxyWallet:', JSON.stringify(pw));
+  } catch(e) { console.log('Erro getProxyWallet:', e.message?.slice(0,100)); }
 }
 
 main().catch(console.error);
