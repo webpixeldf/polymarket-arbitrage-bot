@@ -155,8 +155,19 @@ export async function buyShares(
     const postType = (orderType === OrderType.GTC || orderType === OrderType.GTD)
       ? OrderType.GTC
       : OrderType.FOK;
-    // Log completo da ordem assinada para diagnóstico
-    console.error(`[API] ORDER: salt=${(order as any).salt} sig=${((order as any).signature||'').slice(0,20)}... maker=${(order as any).maker} sigType=${(order as any).signatureType} tokenId=${tokenId.slice(0,12)}...`);
+    // Log completo do payload que será enviado ao servidor
+    const debugPayload = {
+      salt: (order as any).salt,
+      maker: (order as any).maker,
+      signer: (order as any).signer,
+      tokenId: (order as any).tokenId,
+      makerAmount: (order as any).makerAmount,
+      takerAmount: (order as any).takerAmount,
+      side: (order as any).side,
+      signatureType: (order as any).signatureType,
+      sig: ((order as any).signature || '').slice(0, 20),
+    };
+    console.error(`[API] ORDER payload: ${JSON.stringify(debugPayload)}`);
     const resp = await client.postOrder(order, postType);
     console.error(`[API] ${postType} resp: ${JSON.stringify(resp)}`);
     return (resp as any).orderID ?? (resp as any).order?.id ?? null;
