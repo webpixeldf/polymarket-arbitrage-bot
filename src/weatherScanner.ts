@@ -6,12 +6,13 @@
 import axios from 'axios';
 import { config } from './config';
 import { buyShares, createClobClient, getOrderBookData } from './api';
+import { OrderType } from '@polymarket/clob-client';
 import { notify } from './notifier';
 
 // ── Config ─────────────────────────────────────────────────────────────────
 const BET_USDC      = parseFloat(process.env.WEATHER_BET_USDC  ?? '5');
-const MAX_ENTRY     = parseFloat(process.env.WEATHER_MAX_ENTRY ?? '0.20');
-const SCAN_SECS     = parseInt (process.env.WEATHER_SCAN_SECS  ?? '120');
+const MAX_ENTRY     = parseFloat(process.env.WEATHER_MAX_ENTRY ?? '0.30');
+const SCAN_SECS     = parseInt (process.env.WEATHER_SCAN_SECS  ?? '60');
 const SCAN_INTERVAL = SCAN_SECS * 1_000;
 
 // ── Banco de cidades (lat, lon, timezone IANA) ──────────────────────────────
@@ -472,7 +473,7 @@ async function scanWeatherMarkets(simulate: boolean, client: ReturnType<typeof c
     );
 
     if (!simulate) {
-      const orderId = await buyShares(client, tokenId, ob.bestAsk, shares, false, 0.02);
+      const orderId = await buyShares(client, tokenId, ob.bestAsk, shares, simulate, 0.05, OrderType.GTC);
       if (!orderId) {
         console.error(`[Weather] ⚠️  FOK cancelado: ${label}`);
         entered.delete(`weather-${market.conditionId}`);

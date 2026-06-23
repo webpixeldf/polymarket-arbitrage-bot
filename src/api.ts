@@ -138,25 +138,36 @@ export async function buyShares(
   price: number,
   shares: number,
   simulate: boolean,
-  slippage: number = 0   // tolerância máxima acima do preço lido (ex: 0.03 = 3¢)
+  slippage: number = 0,
+  orderType: OrderType = OrderType.FOK
 ): Promise<string | null> {
   if (simulate) {
-    console.error(`[SIM] BUY ${shares} shares @ ${price.toFixed(4)} token=${tokenId}`);
+    console.error(`[SIM] BUY ${shares.toFixed(2)} shares @ ${price.toFixed(4)} token=${tokenId}`);
     return 'sim-order-id';
   }
   try {
-    // FOK com slippage: aceita pagar até price+slippage para garantir execução
-    const orderPrice = parseFloat(Math.min(price + slippage, 0.99).toFixed(4));
-    const resp = await client.createAndPostMarketOrder({
-      tokenID: tokenId,
-      price  : orderPrice,
-      amount : shares,
-      side   : Side.BUY,
-    }, undefined, OrderType.FOK);
-    console.error(`[API] FOK resp: ${JSON.stringify(resp)}`);
-    return (resp as any).orderID ?? null;
+    const limitPrice = parseFloat(Math.min(price + slippage, 0.99).toFixed(4));
+    let resp: any;
+    if (orderType === OrderType.GTC || orderType === OrderType.GTD) {
+      // Limit order: fill imediatamente ao preço de mercado ou melhor, resto fica aberto
+      resp = await client.createAndPostOrder({
+        tokenID: tokenId,
+        price  : limitPrice,
+        size   : parseFloat(shares.toFixed(4)),
+        side   : Side.BUY,
+      }, undefined, OrderType.GTC);
+    } else {
+      resp = await client.createAndPostMarketOrder({
+        tokenID: tokenId,
+        price  : limitPrice,
+        amount : shares,
+        side   : Side.BUY,
+      }, undefined, orderType as OrderType.FOK | OrderType.FAK);
+    }
+    console.error(`[API] ${orderType} resp: ${JSON.stringify(resp)}`);
+    return (resp as any).orderID ?? (resp as any).order?.id ?? null;
   } catch (err) {
-    console.error(`[API] Order failed:`, (err as Error).message);
+    console.error(`[API] Order failed (${orderType}):`, (err as Error).message);
     return null;
   }
 }

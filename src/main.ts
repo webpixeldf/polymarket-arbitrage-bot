@@ -51,9 +51,6 @@ async function main(): Promise<void> {
   await sendStartupEmail(isSimulation);
 
   await Promise.all([
-    startConvergenceScalper(isSimulation),
-    startFinanceScanner(isSimulation),
-    startMultiScanner(isSimulation),
     startWeatherScanner(isSimulation),
     watchWalletBalance(),
   ]);
