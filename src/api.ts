@@ -155,6 +155,8 @@ export async function buyShares(
     const postType = (orderType === OrderType.GTC || orderType === OrderType.GTD)
       ? OrderType.GTC
       : OrderType.FOK;
+    // Log completo da ordem assinada para diagnóstico
+    console.error(`[API] ORDER: salt=${(order as any).salt} sig=${((order as any).signature||'').slice(0,20)}... maker=${(order as any).maker} sigType=${(order as any).signatureType} tokenId=${tokenId.slice(0,12)}...`);
     const resp = await client.postOrder(order, postType);
     console.error(`[API] ${postType} resp: ${JSON.stringify(resp)}`);
     return (resp as any).orderID ?? (resp as any).order?.id ?? null;
