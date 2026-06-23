@@ -286,14 +286,23 @@ async function scanAll(simulate: boolean, client: ReturnType<typeof createClobCl
 
     if (category === 'sports') {
       const check = checkSportsResult(question, espnGames);
-      if (!check.verified) continue;
+      if (!check.verified) {
+        console.error(`[Multi] ⏭  Sports: ${check.reason} | "${question.slice(0,50)}"`);
+        continue;
+      }
       preSideHint = check.betSide;
       verifyReason = check.reason;
       preVerified  = true;
     } else if (category === 'consensus') {
-      if (hoursLeft > CONSENSUS_MAX_HOURS) continue;
+      if (hoursLeft > CONSENSUS_MAX_HOURS) {
+        console.error(`[Multi] ⏭  Consensus ${hoursLeft.toFixed(1)}h > ${CONSENSUS_MAX_HOURS}h | "${question.slice(0,50)}"`);
+        continue;
+      }
     } else if (category === 'crypto' || category === 'finance') {
-      if (hoursLeft > CRYPTO_FIN_MAX_H) continue;
+      if (hoursLeft > CRYPTO_FIN_MAX_H) {
+        console.error(`[Multi] ⏭  ${category} ${hoursLeft.toFixed(1)}h > ${CRYPTO_FIN_MAX_H}h | "${question.slice(0,50)}"`);
+        continue;
+      }
     }
 
     // 5. Order book real (CLOB)
