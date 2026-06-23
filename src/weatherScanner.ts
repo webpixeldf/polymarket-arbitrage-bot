@@ -337,7 +337,8 @@ async function fetchAllMarkets(): Promise<any[]> {
 async function scanWeatherMarkets(simulate: boolean, client: ReturnType<typeof createClobClient>): Promise<void> {
   const all = await fetchAllMarkets();
   const now = Date.now();
-  let scanned = 0, verified = 0, entries = 0;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  let scanned = 0, parseFail = 0, futureSkip = 0, noData = 0, verified = 0, entries = 0;
 
   for (const market of all) {
     if (!market.conditionId || !market.endDate || !market.clobTokenIds) continue;
@@ -349,17 +350,20 @@ async function scanWeatherMarkets(simulate: boolean, client: ReturnType<typeof c
     scanned++;
 
     const cond = parseQuestion(question, market.endDate);
-    if (!cond) continue;
+    if (!cond) {
+      parseFail++;
+      if (parseFail <= 3) console.error(`[Weather] ⏭  Parse: "${question.slice(0, 70)}"`);
+      continue;
+    }
 
-    // Evento precisa ter acontecido (data no passado)
-    const eventTs = new Date(cond.date + 'T23:59:00').getTime();
-    if (eventTs > now) continue;
+    // Só entra se o evento já aconteceu (hoje ou antes)
+    if (cond.date > todayStr) { futureSkip++; continue; }
 
     // Consulta clima real
     const cityData = CITIES[cond.cityKey];
     const actualC = await getActualTemp(cityData, cond.date, cond.tempType);
     await sleep(150);
-    if (actualC === null) continue;
+    if (actualC === null) { noData++; continue; }
 
     const yesWins = checkOutcome(actualC, cond);
     if (yesWins === null) continue;
@@ -444,7 +448,7 @@ async function scanWeatherMarkets(simulate: boolean, client: ReturnType<typeof c
   }
 
   console.error(
-    `[Weather] Scan: ${all.length} mercados → ${scanned} clima → ${verified} verificados → ${entries} entradas`
+    `[Weather] Scan: ${all.length} mercados → ${scanned} clima → parse_ok:${scanned - parseFail} parse_fail:${parseFail} futuro:${futureSkip} sem_dados:${noData} → ${verified} verificados → ${entries} entradas`
   );
 }
 
