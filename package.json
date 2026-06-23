@@ -15,8 +15,8 @@
     "setup": "ts-node src/setup.ts"
   },
   "dependencies": {
-    "@polymarket/clob-client": "^4.22.8",
-    "@polymarket/order-utils": "^2.1.0",
+    "@polymarket/clob-client": "^4.0.0",
+    "@polymarket/order-utils": "^2.0.0",
     "@types/express": "^5.0.6",
     "@types/nodemailer": "^8.0.1",
     "axios": "^1.6.0",

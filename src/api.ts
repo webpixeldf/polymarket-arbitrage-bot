@@ -119,12 +119,9 @@ export async function sellShares(
     return 'sim-order-id';
   }
   try {
-    const resp = await client.createAndPostMarketOrder({
-      tokenID: tokenId,
-      price,
-      amount: shares,
-      side: Side.SELL,
-    }, undefined, OrderType.FOK);
+    const order = await client.createOrder({ tokenID: tokenId, price, size: shares, side: Side.SELL });
+    const resp  = await client.postOrder(order, OrderType.FOK);
+    console.error(`[API] SELL resp: ${JSON.stringify(resp)}`);
     return (resp as any).orderID ?? null;
   } catch (err) {
     console.error(`[API] Sell order failed:`, (err as Error).message);
@@ -147,27 +144,19 @@ export async function buyShares(
   }
   try {
     const limitPrice = parseFloat(Math.min(price + slippage, 0.99).toFixed(4));
-    let resp: any;
-    if (orderType === OrderType.GTC || orderType === OrderType.GTD) {
-      // Limit order: fill imediatamente ao preço de mercado ou melhor, resto fica aberto
-      resp = await client.createAndPostOrder({
-        tokenID: tokenId,
-        price  : limitPrice,
-        size   : parseFloat(shares.toFixed(4)),
-        side   : Side.BUY,
-      }, undefined, OrderType.GTC);
-    } else {
-      // Market order (FOK/FAK): amount = USDC a gastar (não shares!)
-      // shares × price = BET_USDC (o custo real da posição)
-      const usdcAmount = parseFloat((shares * price).toFixed(4));
-      resp = await client.createAndPostMarketOrder({
-        tokenID: tokenId,
-        price  : limitPrice,
-        amount : usdcAmount,
-        side   : Side.BUY,
-      }, undefined, orderType as OrderType.FOK | OrderType.FAK);
-    }
-    console.error(`[API] ${orderType} resp: ${JSON.stringify(resp)}`);
+    // v4.0.0 API: createOrder (limite) + postOrder (FOK ou GTC)
+    // size = shares (tokens condicionais), price = preço máximo por share
+    const order = await client.createOrder({
+      tokenID: tokenId,
+      price  : limitPrice,
+      size   : parseFloat(shares.toFixed(6)),
+      side   : Side.BUY,
+    });
+    const postType = (orderType === OrderType.GTC || orderType === OrderType.GTD)
+      ? OrderType.GTC
+      : OrderType.FOK;
+    const resp = await client.postOrder(order, postType);
+    console.error(`[API] ${postType} resp: ${JSON.stringify(resp)}`);
     return (resp as any).orderID ?? (resp as any).order?.id ?? null;
   } catch (err) {
     console.error(`[API] Order failed (${orderType}):`, (err as Error).message);

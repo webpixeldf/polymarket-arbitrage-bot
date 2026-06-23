@@ -6,7 +6,6 @@
 import axios from 'axios';
 import { config } from './config';
 import { buyShares, createClobClient, getOrderBookData } from './api';
-import { OrderType } from '@polymarket/clob-client';
 import { notify } from './notifier';
 
 // ── Config ─────────────────────────────────────────────────────────────────
