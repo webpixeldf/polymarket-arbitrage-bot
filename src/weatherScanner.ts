@@ -442,9 +442,10 @@ async function scanWeatherMarkets(simulate: boolean, client: ReturnType<typeof c
     // Pula mercados cujo endDate já passou — CLOB não aceita ordens após expiração
     const msToEnd = new Date(market.endDate).getTime() - now;
     if (msToEnd < 0) {
-      console.error(`[Weather] ⏰ expirado (endDate ${market.endDate.slice(0, 10)}) | "${question.slice(0, 55)}"`);
+      console.error(`[Weather] ⏰ expirado (endDate ${market.endDate}) | "${question.slice(0, 55)}"`);
       continue;
     }
+    console.error(`[Weather] 🔓 aberto até ${market.endDate} (${(msToEnd/3_600_000).toFixed(1)}h) | evt:${cond.date} | "${question.slice(0, 50)}"`)
 
     const betSide: 'YES' | 'NO' = yesWins ? 'YES' : 'NO';
     const tokenId = betSide === 'YES' ? yesTokenId : noTokenId;
