@@ -121,79 +121,79 @@ async function main() {
   console.log('EOA  :', wallet.address);
   console.log('Proxy:', proxy);
 
-  // Busca um mercado ATIVO com liquidez para testar
-  console.log('\nBuscando mercado ativo...');
-  const markets = await axios.get('https://clob.polymarket.com/markets', {
-    params: { active: true, closed: false, limit: 20 },
-    timeout: 8000,
-  }).catch(e => ({ data: { data: [] } }));
-
-  const list = markets.data?.data || markets.data || [];
-  let TOKEN = null, marketName = null;
-  for (const m of list) {
-    const tokens = m.tokens || [];
-    for (const t of tokens) {
-      if (t.token_id && m.active && !m.closed) {
-        TOKEN = t.token_id;
-        marketName = m.question || m.market_slug;
+  // Busca mercado ativo via Gamma API
+  console.log('\nBuscando mercado ativo via Gamma...');
+  let TOKEN = null, marketName = null, bestPrice = 0.50;
+  try {
+    const gam = await axios.get('https://gamma-api.polymarket.com/markets', {
+      params: { active: true, closed: false, limit: 10, order: 'volume24hr', ascending: false },
+      timeout: 8000,
+    });
+    const list = Array.isArray(gam.data) ? gam.data : gam.data?.markets || [];
+    for (const m of list) {
+      const tokens = m.clobTokenIds || m.tokens || [];
+      const tid = Array.isArray(tokens) ? tokens[0] : tokens?.yes;
+      if (tid && !m.closed && m.active !== false) {
+        TOKEN = tid; marketName = m.question || m.slug;
+        bestPrice = parseFloat(m.bestBid || m.bestAsk || 0.50) || 0.50;
         break;
       }
     }
-    if (TOKEN) break;
-  }
+  } catch(e) { console.log('Gamma fallback:', e.message?.slice(0,40)); }
 
   if (!TOKEN) {
-    console.log('Usando token fallback (Nikki Haley 2028)');
     TOKEN = '30919109558246209971545892228598482722881502507049010402392877610451001659386';
-    marketName = 'Nikki Haley 2028';
+    marketName = 'Nikki Haley 2028'; bestPrice = 0.06;
   }
   console.log('Token:', TOKEN);
-  console.log('Mercado:', marketName);
+  console.log('Mercado:', marketName, '| Preço ~', bestPrice);
 
-  // Teste 1: GTC BUY $1 (makerAmount=1000000)
-  console.log('\n=== TESTE 1: GTC BUY $1, side=0 (integer) ===');
-  const r1 = await postOrderNew({
-    wallet, creds, proxyWallet: proxy,
-    tokenID: TOKEN, price: 0.50, size: 2.0,  // $1 total
-    buyOrSell: 'BUY', orderType: 'GTC',
-  });
-  console.log('Resultado:', JSON.stringify(r1));
-  if (!r1?.error) {
-    console.log('✅ SUCESSO! Cancelando...');
-    const h = await buildL2Headers(creds, 'DELETE', '/order', JSON.stringify({ orderID: r1.orderID }));
-    await axios.delete('https://clob.polymarket.com/order', { data: { orderID: r1.orderID }, headers: h }).catch(() => {});
-  }
+  const tryOrder = async (label, overrides) => {
+    const D6   = 1_000_000;
+    const p    = overrides.price    ?? 0.50;
+    const s    = overrides.size     ?? 2.0;
+    const side = overrides.side     ?? 0;
+    const ts   = overrides.tsMs     ? Date.now().toString()
+                                    : Math.floor(Date.now() / 1000).toString();
+    const ma   = Math.round(p * s * D6);
+    const ta   = Math.floor(ma / p);
+    const salt = BigInt('0x' + crypto.randomBytes(8).toString('hex')).toString();
+    const tok  = overrides.tokenID ?? TOKEN;
 
-  // Teste 2: mesmo mas com side como string "BUY"
-  console.log('\n=== TESTE 2: GTC BUY $1, side="BUY" (string) ===');
-  const origPostOrder = postOrderNew;
-  // Patch temporário: envia side como string
-  const D6 = 1_000_000;
-  const salt2 = BigInt('0x' + crypto.randomBytes(8).toString('hex')).toString();
-  const ts2 = Date.now().toString();
-  const ma2 = Math.round(0.50 * 2.0 * D6);
-  const ta2 = Math.floor(ma2 / 0.50);
-  const domain2 = { name: 'DepositWallet', version: '1', chainId: 137, verifyingContract: proxy, salt: ZERO_B32 };
-  const types2 = { TypedDataSign: [
-    { name: 'salt', type: 'uint256' }, { name: 'maker', type: 'address' }, { name: 'signer', type: 'address' },
-    { name: 'tokenId', type: 'uint256' }, { name: 'makerAmount', type: 'uint256' }, { name: 'takerAmount', type: 'uint256' },
-    { name: 'timestamp', type: 'uint256' }, { name: 'side', type: 'uint8' }, { name: 'signatureType', type: 'uint8' },
-    { name: 'metadata', type: 'bytes32' }, { name: 'builder', type: 'bytes32' },
-  ]};
-  const msg2 = { salt: salt2, maker: proxy, signer: proxy, tokenId: TOKEN,
-    makerAmount: ma2.toString(), takerAmount: ta2.toString(), timestamp: ts2,
-    side: 0, signatureType: 3, metadata: ZERO_B32, builder: ZERO_B32 };
-  const sig2 = await wallet._signTypedData(domain2, types2, msg2);
-  const payload2 = { order: { ...msg2, side: 'BUY', signature: sig2 }, owner: creds.key, orderType: 'GTC' };
-  const body2 = JSON.stringify(payload2);
-  const h2 = await buildL2Headers(creds, 'POST', '/order', body2);
-  const r2 = await axios.post('https://clob.polymarket.com/order', payload2, { headers: h2, timeout: 15000 }).then(r => r.data).catch(e => e.response?.data);
-  console.log('Resultado:', JSON.stringify(r2));
-  if (!r2?.error && r2?.orderID) {
-    const h = await buildL2Headers(creds, 'DELETE', '/order', JSON.stringify({ orderID: r2.orderID }));
-    await axios.delete('https://clob.polymarket.com/order', { data: { orderID: r2.orderID }, headers: h }).catch(() => {});
-    console.log('✅ SUCESSO com side="BUY"!');
-  }
+    const domain = { name: 'DepositWallet', version: '1', chainId: 137, verifyingContract: proxy, salt: ZERO_B32 };
+    const types  = { TypedDataSign: [
+      { name: 'salt', type: 'uint256' }, { name: 'maker', type: 'address' }, { name: 'signer', type: 'address' },
+      { name: 'tokenId', type: 'uint256' }, { name: 'makerAmount', type: 'uint256' }, { name: 'takerAmount', type: 'uint256' },
+      { name: 'timestamp', type: 'uint256' }, { name: 'side', type: 'uint8' }, { name: 'signatureType', type: 'uint8' },
+      { name: 'metadata', type: 'bytes32' }, { name: 'builder', type: 'bytes32' },
+    ]};
+    const msg = { salt, maker: proxy, signer: proxy, tokenId: tok,
+      makerAmount: ma.toString(), takerAmount: ta.toString(), timestamp: ts,
+      side, signatureType: 3, metadata: ZERO_B32, builder: ZERO_B32 };
+    const sig = await wallet._signTypedData(domain, types, msg);
+
+    const postSide  = overrides.sideStr ? 'BUY' : side;
+    const negRisk   = overrides.negRisk;
+    const payload   = { order: { ...msg, side: postSide, signature: sig }, owner: creds.key, orderType: 'GTC',
+                        ...(negRisk !== undefined ? { negRisk } : {}) };
+    const bodyStr   = JSON.stringify(payload);
+    const headers   = await buildL2Headers(creds, 'POST', '/order', bodyStr);
+    const result    = await axios.post('https://clob.polymarket.com/order', payload, { headers, timeout: 15000 })
+                        .then(r => r.data).catch(e => e.response?.data || { error: e.message });
+    console.log(`${label}: ${JSON.stringify(result)}`);
+    if (!result?.error && result?.orderID) {
+      console.log('✅ SUCESSO!');
+      const hd = await buildL2Headers(creds, 'DELETE', '/order', JSON.stringify({ orderID: result.orderID }));
+      await axios.delete('https://clob.polymarket.com/order', { data: { orderID: result.orderID }, headers: hd }).catch(() => {});
+    }
+  };
+
+  await tryOrder('T1: ts=ms, side=0, $2',       { tsMs: true,  price: 0.50, size: 4.0,  side: 0 });
+  await tryOrder('T2: ts=segundos, side=0, $2',  { tsMs: false, price: 0.50, size: 4.0,  side: 0 });
+  await tryOrder('T3: ts=ms, side="BUY", $2',    { tsMs: true,  price: 0.50, size: 4.0,  sideStr: true });
+  await tryOrder('T4: negRisk=true, $2',         { tsMs: true,  price: 0.50, size: 4.0,  side: 0, negRisk: true });
+  await tryOrder('T5: negRisk=false, $2',        { tsMs: true,  price: 0.50, size: 4.0,  side: 0, negRisk: false });
+  await tryOrder('T6: $5 (maior valor)',         { tsMs: true,  price: 0.50, size: 10.0, side: 0 });
 }
 
 main().catch(console.error);
