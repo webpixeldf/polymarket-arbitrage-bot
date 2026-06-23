@@ -1,6 +1,11 @@
 // Testa POST /order contra mercado vivo usando bridge v5 nativo
-const axios = require('axios');
 require('dotenv').config({ override: true });
+// Proxy global via WEBSHARE
+if (process.env.WEBSHARE_PROXY_URL) {
+  process.env.GLOBAL_AGENT_HTTPS_PROXY = process.env.WEBSHARE_PROXY_URL;
+  require('global-agent/bootstrap');
+}
+const axios = require('axios');
 const { ethers } = require('ethers');
 const { postOrderNativeV5 } = require('./src/v5bridge');
 

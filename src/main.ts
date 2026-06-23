@@ -1,3 +1,10 @@
+// Proxy global — roteia todo tráfego HTTP/HTTPS pelo WEBSHARE_PROXY_URL (se definido)
+if (process.env.GLOBAL_AGENT_HTTPS_PROXY || process.env.WEBSHARE_PROXY_URL) {
+  process.env.GLOBAL_AGENT_HTTPS_PROXY = process.env.GLOBAL_AGENT_HTTPS_PROXY || process.env.WEBSHARE_PROXY_URL;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require('global-agent/bootstrap');
+}
+
 import { config } from './config';
 import { createClobClient, getWalletBalance } from './api';
 import { log } from './logger';

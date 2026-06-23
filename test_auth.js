@@ -1,6 +1,10 @@
 'use strict';
-// Diagnóstico de conta: verifica L2 auth e re-deriva credenciais
 require('dotenv').config({ override: true });
+// Proxy global via WEBSHARE
+if (process.env.WEBSHARE_PROXY_URL) {
+  process.env.GLOBAL_AGENT_HTTPS_PROXY = process.env.WEBSHARE_PROXY_URL;
+  require('global-agent/bootstrap');
+}
 const { ethers } = require('ethers');
 
 async function main() {
