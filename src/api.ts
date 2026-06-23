@@ -144,24 +144,30 @@ export async function buyShares(
   }
   try {
     const limitPrice = parseFloat(Math.min(price + slippage, 0.99).toFixed(4));
-    // Detecta negRisk para assinar com contrato correto
+    // Busca negRisk e feeRateBps reais do mercado (ambos afetam a assinatura EIP-712)
     let negRisk = false;
+    let feeRateBps = 0;
     try {
-      const nr = await axios.get(`${config.clobApiUrl}/neg-risk`, { params: { token_id: tokenId }, timeout: 5000 });
-      negRisk = nr.data?.neg_risk === true;
-    } catch { /* assume false */ }
+      const [nr, fee] = await Promise.all([
+        axios.get(`${config.clobApiUrl}/neg-risk`,  { params: { token_id: tokenId }, timeout: 5000 }),
+        axios.get(`${config.clobApiUrl}/fee-rate`,  { params: { token_id: tokenId }, timeout: 5000 }),
+      ]);
+      negRisk    = nr.data?.neg_risk  === true;
+      feeRateBps = fee.data?.base_fee ?? 0;
+    } catch { /* mantém defaults */ }
 
     // v4.0.0 API: createOrder (limite) + postOrder (FOK ou GTC)
     const order = await client.createOrder({
-      tokenID: tokenId,
-      price  : limitPrice,
-      size   : parseFloat(shares.toFixed(6)),
-      side   : Side.BUY,
+      tokenID    : tokenId,
+      price      : limitPrice,
+      size       : parseFloat(shares.toFixed(6)),
+      side       : Side.BUY,
+      feeRateBps,           // taxa real do mercado na assinatura EIP-712
     }, { negRisk });
     const postType = (orderType === OrderType.GTC || orderType === OrderType.GTD)
       ? OrderType.GTC
       : OrderType.FOK;
-    console.error(`[API] ORDER negRisk=${negRisk} sigType=${(order as any).signatureType} maker=${((order as any).maker||'').slice(0,10)}...`);
+    console.error(`[API] ORDER negRisk=${negRisk} fee=${feeRateBps} sigType=${(order as any).signatureType} maker=${((order as any).maker||'').slice(0,10)}...`);
     const resp = await client.postOrder(order, postType);
     console.error(`[API] ${postType} resp: ${JSON.stringify(resp)}`);
     return (resp as any).orderID ?? (resp as any).order?.id ?? null;
