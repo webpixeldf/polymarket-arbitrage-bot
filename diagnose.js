@@ -48,15 +48,21 @@ async function main() {
     console.error('Balance error:', e.message);
   }
 
-  // 3) Testa ordem num mercado com alta liquidez (Ankara YES)
+  // 3) Testa ordem com feeRateBps correto (1000 = taxa do mercado)
   const TOKEN_ID = '56441613474608958357488383796816307365995276962960033087501461366776172243406';
-  console.log('\n=== TESTE ORDER (YES@15¢ negRisk) ===');
+  console.log('\n=== TESTE ORDER (YES@15¢ negRisk feeRateBps=1000) ===');
   try {
+    // busca fee real
+    const feeResp = await axios.get(`https://clob.polymarket.com/fee-rate`, {params:{token_id:TOKEN_ID}});
+    console.log('fee-rate:', JSON.stringify(feeResp.data));
+    const feeRateBps = feeResp.data?.base_fee ?? 0;
+
     const order = await client.createOrder({
       tokenID: TOKEN_ID,
-      price: 0.15,
-      size: 1.0,
+      price: 0.20,
+      size: 25.0,    // $5 em shares a 20¢
       side: Side.BUY,
+      feeRateBps,
     }, { negRisk: true });
     console.log('Ordem criada:', JSON.stringify({
       maker: order.maker,
