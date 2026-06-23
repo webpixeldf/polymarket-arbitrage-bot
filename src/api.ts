@@ -153,6 +153,7 @@ export async function buyShares(
       amount : shares,
       side   : Side.BUY,
     }, undefined, OrderType.FOK);
+    console.error(`[API] FOK resp: ${JSON.stringify(resp)}`);
     return (resp as any).orderID ?? null;
   } catch (err) {
     console.error(`[API] Order failed:`, (err as Error).message);
