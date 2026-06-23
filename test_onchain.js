@@ -13,8 +13,24 @@ async function main() {
   console.log('EOA:  ', EOA);
   console.log('Proxy:', proxy);
 
-  // Polygon RPC público
-  const provider = new ethers.providers.JsonRpcProvider('https://polygon-rpc.com');
+  // Tenta múltiplos RPCs da Polygon até um funcionar
+  const RPCS = [
+    'https://polygon.llamarpc.com',
+    'https://rpc.ankr.com/polygon',
+    'https://polygon-bor-rpc.publicnode.com',
+    'https://polygon-rpc.com',
+  ];
+  let provider = null;
+  for (const rpc of RPCS) {
+    try {
+      const p = new ethers.providers.JsonRpcProvider(rpc);
+      const bn = await p.getBlockNumber();
+      console.log(`RPC OK: ${rpc} (bloco ${bn})`);
+      provider = p;
+      break;
+    } catch { console.log(`RPC falhou: ${rpc}`); }
+  }
+  if (!provider) { console.log('Nenhum RPC funcionou'); return; }
 
   // USDC e USDC.e na Polygon
   const USDC  = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'; // native USDC
