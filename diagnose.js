@@ -88,7 +88,7 @@ async function main() {
       side: Side.BUY,
     }, { negRisk: true });
 
-    // Monta payload no formato v5 (com deferExec)
+    // Monta payload no formato v5 (com deferExec) — usando side string e amounts corretos
     const payload = {
       deferExec: false,
       order: {
@@ -99,7 +99,7 @@ async function main() {
         tokenId: order.tokenId,
         makerAmount: order.makerAmount,
         takerAmount: order.takerAmount,
-        side: 0,
+        side: 'BUY',
         expiration: order.expiration,
         nonce: order.nonce,
         feeRateBps: order.feeRateBps,
