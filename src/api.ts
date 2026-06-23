@@ -157,10 +157,13 @@ export async function buyShares(
         side   : Side.BUY,
       }, undefined, OrderType.GTC);
     } else {
+      // Market order (FOK/FAK): amount = USDC a gastar (não shares!)
+      // shares × price = BET_USDC (o custo real da posição)
+      const usdcAmount = parseFloat((shares * price).toFixed(4));
       resp = await client.createAndPostMarketOrder({
         tokenID: tokenId,
         price  : limitPrice,
-        amount : shares,
+        amount : usdcAmount,
         side   : Side.BUY,
       }, undefined, orderType as OrderType.FOK | OrderType.FAK);
     }
