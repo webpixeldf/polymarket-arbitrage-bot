@@ -37,18 +37,28 @@ async function postOrderV5(order: any, orderType: 'FOK' | 'GTC'): Promise<any> {
   const ts   = Math.floor(Date.now() / 1000);
   const body = JSON.stringify(payload);
   const sig  = buildPolyHmacSignature(config.apiSecret, ts, 'POST', '/order', body);
-  const resp = await axios.post(`${config.clobApiUrl}/order`, payload, {
-    headers: {
-      POLY_ADDRESS:    order.signer,     // EOA já está na ordem assinada
-      POLY_SIGNATURE:  sig,
-      POLY_TIMESTAMP:  `${ts}`,
-      POLY_API_KEY:    config.apiKey,
-      POLY_PASSPHRASE: config.apiPassphrase,
-      'Content-Type':  'application/json',
-    },
-    timeout: 10_000,
-  });
-  return resp.data;
+  try {
+    const resp = await axios.post(`${config.clobApiUrl}/order`, payload, {
+      headers: {
+        POLY_ADDRESS:    order.signer,
+        POLY_SIGNATURE:  sig,
+        POLY_TIMESTAMP:  `${ts}`,
+        POLY_API_KEY:    config.apiKey,
+        POLY_PASSPHRASE: config.apiPassphrase,
+        'Content-Type':  'application/json',
+      },
+      timeout: 10_000,
+    });
+    return resp.data;
+  } catch (err: any) {
+    // Axios joga exceção em 4xx/5xx — retorna o body para ser logado pelo chamador
+    if (err.response?.data) {
+      console.error(`[API] POST /order ${err.response.status}: ${JSON.stringify(err.response.data)}`);
+      console.error(`[API] Payload enviado: ${body.slice(0, 300)}`);
+      return err.response.data;
+    }
+    throw err;
+  }
 }
 
 export function createClobClient(): ClobClient {
