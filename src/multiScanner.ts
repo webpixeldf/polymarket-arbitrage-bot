@@ -13,12 +13,14 @@ import { buyShares, createClobClient, getOrderBookData } from './api';
 import { notify } from './notifier';
 
 // ── Config ─────────────────────────────────────────────────────────────────
-const BET_USDC       = parseFloat(process.env.MULTI_BET_USDC      ?? '1');
-const MIN_PRICE      = parseFloat(process.env.MULTI_MIN_PRICE     ?? '0.88');
-const MAX_PRICE      = parseFloat(process.env.MULTI_MAX_PRICE     ?? '0.97');
-const MAX_HOURS      = parseFloat(process.env.MULTI_MAX_HOURS     ?? '24');
-const CONSENSUS_MIN  = parseFloat(process.env.MULTI_CONSENSUS_MIN ?? '0.95');
-const SCAN_INTERVAL  = 5 * 60_000; // scan a cada 5 minutos
+const BET_USDC           = parseFloat(process.env.MULTI_BET_USDC          ?? '1');
+const MIN_PRICE          = parseFloat(process.env.MULTI_MIN_PRICE         ?? '0.88');
+const MAX_PRICE          = parseFloat(process.env.MULTI_MAX_PRICE         ?? '0.97');
+const MAX_HOURS          = parseFloat(process.env.MULTI_MAX_HOURS         ?? '24');
+const CONSENSUS_MIN      = parseFloat(process.env.MULTI_CONSENSUS_MIN     ?? '0.95');
+const CONSENSUS_MAX_HOURS= parseFloat(process.env.MULTI_CONSENSUS_HOURS   ?? '12');
+const CRYPTO_FIN_MAX_H   = parseFloat(process.env.MULTI_CRYPTOFIN_HOURS   ?? '2');
+const SCAN_INTERVAL      = 5 * 60_000; // scan a cada 5 minutos
 
 // ── Tipos ──────────────────────────────────────────────────────────────────
 type Category = 'sports' | 'crypto' | 'finance' | 'consensus';
@@ -289,9 +291,9 @@ async function scanAll(simulate: boolean, client: ReturnType<typeof createClobCl
       verifyReason = check.reason;
       preVerified  = true;
     } else if (category === 'consensus') {
-      if (hoursLeft > 4) continue; // só entra perto da resolução
+      if (hoursLeft > CONSENSUS_MAX_HOURS) continue;
     } else if (category === 'crypto' || category === 'finance') {
-      if (hoursLeft > 2) continue; // módulos específicos cuidam do resto
+      if (hoursLeft > CRYPTO_FIN_MAX_H) continue;
     }
 
     // 5. Order book real (CLOB)
@@ -412,8 +414,8 @@ export async function startMultiScanner(simulate: boolean): Promise<void> {
   const client = createClobClient();
   console.error(
     `[Multi] Iniciando — faixa: ${(MIN_PRICE*100).toFixed(0)}-${(MAX_PRICE*100).toFixed(0)}¢ | ` +
-    `até ${MAX_HOURS}h p/ resolução | consensus mín: ${(CONSENSUS_MIN*100).toFixed(0)}¢ | ` +
-    `aposta: $${BET_USDC} | scan: 5min`
+    `consensus: ≤${CONSENSUS_MAX_HOURS}h mín ${(CONSENSUS_MIN*100).toFixed(0)}¢ | ` +
+    `crypto/fin: ≤${CRYPTO_FIN_MAX_H}h | aposta: $${BET_USDC} | scan: 5min`
   );
 
   while (true) {
