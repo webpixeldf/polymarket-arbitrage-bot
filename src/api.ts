@@ -4,6 +4,53 @@ import { ClobClient, OrderType, Side } from '@polymarket/clob-client';
 import { config } from './config';
 import { GammaMarket, OrderBook } from './models';
 
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { buildPolyHmacSignature } = require('@polymarket/clob-client/dist/signing/hmac');
+
+/**
+ * Envia ordem no formato v5 do clob-client (inclui deferExec:false).
+ * O servidor exige esse campo desde a migração para v5; sem ele retorna
+ * "invalid order version, please use the latest clob-client".
+ */
+async function postOrderV5(order: any, orderType: 'FOK' | 'GTC'): Promise<any> {
+  const sideStr = (order.side === 0) ? 'BUY' : 'SELL';
+  const payload = {
+    deferExec: false,
+    order: {
+      salt:          parseInt(order.salt, 10),
+      maker:         order.maker,
+      signer:        order.signer,
+      taker:         order.taker,
+      tokenId:       order.tokenId,
+      makerAmount:   order.makerAmount,
+      takerAmount:   order.takerAmount,
+      side:          sideStr,
+      expiration:    order.expiration,
+      nonce:         order.nonce,
+      feeRateBps:    order.feeRateBps,
+      signatureType: order.signatureType,
+      signature:     order.signature,
+    },
+    owner:     config.apiKey,
+    orderType,
+  };
+  const ts   = Math.floor(Date.now() / 1000);
+  const body = JSON.stringify(payload);
+  const sig  = buildPolyHmacSignature(config.apiSecret, ts, 'POST', '/order', body);
+  const resp = await axios.post(`${config.clobApiUrl}/order`, payload, {
+    headers: {
+      POLY_ADDRESS:    order.signer,     // EOA já está na ordem assinada
+      POLY_SIGNATURE:  sig,
+      POLY_TIMESTAMP:  `${ts}`,
+      POLY_API_KEY:    config.apiKey,
+      POLY_PASSPHRASE: config.apiPassphrase,
+      'Content-Type':  'application/json',
+    },
+    timeout: 10_000,
+  });
+  return resp.data;
+}
+
 export function createClobClient(): ClobClient {
   const wallet = new ethers.Wallet(config.privateKey);
   const creds = (config.apiKey && config.apiSecret && config.apiPassphrase)
@@ -129,7 +176,7 @@ export async function sellShares(
       feeRateBps = fee.data?.base_fee ?? 0;
     } catch { /* mantém defaults */ }
     const order = await client.createOrder({ tokenID: tokenId, price, size: shares, side: Side.SELL, feeRateBps }, { negRisk });
-    const resp  = await client.postOrder(order, OrderType.FOK);
+    const resp  = await postOrderV5(order, 'FOK');
     console.error(`[API] SELL resp: ${JSON.stringify(resp)}`);
     return (resp as any).orderID ?? null;
   } catch (err) {
@@ -177,7 +224,7 @@ export async function buyShares(
       ? OrderType.GTC
       : OrderType.FOK;
     console.error(`[API] ORDER negRisk=${negRisk} fee=${feeRateBps} sigType=${(order as any).signatureType} maker=${((order as any).maker||'').slice(0,10)}...`);
-    const resp = await client.postOrder(order, postType);
+    const resp = await postOrderV5(order, postType === OrderType.GTC ? 'GTC' : 'FOK');
     console.error(`[API] ${postType} resp: ${JSON.stringify(resp)}`);
     return (resp as any).orderID ?? (resp as any).order?.id ?? null;
   } catch (err) {

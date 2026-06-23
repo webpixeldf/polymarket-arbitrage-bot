@@ -49,11 +49,12 @@ async function main() {
     console.error('Balance error:', e.message);
   }
 
-  // 3) Testa ordem com feeRateBps correto (1000 = taxa do mercado)
+  // 3) Testa ordem com feeRateBps=1000 + deferExec:false (formato v5 completo)
   const TOKEN_ID = '56441613474608958357488383796816307365995276962960033087501461366776172243406';
-  console.log('\n=== TESTE ORDER (YES@15¢ negRisk feeRateBps=1000) ===');
+  console.log('\n=== TESTE ORDER (feeRateBps real + deferExec:false) ===');
   try {
-    // busca fee real
+    const { buildPolyHmacSignature } = require('@polymarket/clob-client/dist/signing/hmac');
+
     const feeResp = await axios.get(`https://clob.polymarket.com/fee-rate`, {params:{token_id:TOKEN_ID}});
     console.log('fee-rate:', JSON.stringify(feeResp.data));
     const feeRateBps = feeResp.data?.base_fee ?? 0;
@@ -61,22 +62,58 @@ async function main() {
     const order = await client.createOrder({
       tokenID: TOKEN_ID,
       price: 0.20,
-      size: 25.0,    // $5 em shares a 20¢
+      size: 25.0,
       side: Side.BUY,
       feeRateBps,
     }, { negRisk: true });
-    console.log('Ordem criada:', JSON.stringify({
-      maker: order.maker,
-      signer: order.signer,
-      signatureType: order.signatureType,
-      makerAmount: order.makerAmount,
-      takerAmount: order.takerAmount,
-      sig: order.signature?.slice(0, 20),
-    }));
-    const resp = await client.postOrder(order, OrderType.FOK);
-    console.log('POST resp:', JSON.stringify(resp));
+
+    console.log('Ordem criada: signer=%s sigType=%d fee=%s', order.signer, order.signatureType, order.feeRateBps);
+
+    // Payload v5 com deferExec:false
+    const sideStr = (order.side === 0) ? 'BUY' : 'SELL';
+    const payload = {
+      deferExec: false,
+      order: {
+        salt: parseInt(order.salt, 10),
+        maker: order.maker,
+        signer: order.signer,
+        taker: order.taker,
+        tokenId: order.tokenId,
+        makerAmount: order.makerAmount,
+        takerAmount: order.takerAmount,
+        side: sideStr,
+        expiration: order.expiration,
+        nonce: order.nonce,
+        feeRateBps: order.feeRateBps,
+        signatureType: order.signatureType,
+        signature: order.signature,
+      },
+      owner: creds.key,
+      orderType: 'FOK',
+    };
+
+    const ts   = Math.floor(Date.now() / 1000);
+    const body = JSON.stringify(payload);
+    const sig  = buildPolyHmacSignature(creds.secret, ts, 'POST', '/order', body);
+
+    const resp = await axios.post('https://clob.polymarket.com/order', payload, {
+      headers: {
+        POLY_ADDRESS:    order.signer,
+        POLY_SIGNATURE:  sig,
+        POLY_TIMESTAMP:  `${ts}`,
+        POLY_API_KEY:    creds.key,
+        POLY_PASSPHRASE: creds.passphrase,
+        'Content-Type':  'application/json',
+      },
+      timeout: 10_000,
+    });
+    console.log('✅ POST resp:', JSON.stringify(resp.data));
   } catch (e) {
-    console.error('Order test erro:', e.message);
+    if (e.response) {
+      console.error('❌ HTTP', e.response.status, JSON.stringify(e.response.data));
+    } else {
+      console.error('Order test erro:', e.message);
+    }
   }
 
   // 4) Testa com payload manual incluindo deferExec:false (formato v5)
