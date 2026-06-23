@@ -37,27 +37,36 @@ async function test() {
   const feeRateBps = feeR.data.base_fee ?? 0;
   const negRisk = nrR.data.neg_risk === true;
   console.log('fee:', feeRateBps, '| negRisk:', negRisk);
-  console.log('Usando clob-client v5 nativo via dynamic import...');
 
-  try {
-    const resp = await postOrderNativeV5({
-      clobUrl: 'https://clob.polymarket.com',
-      chainId: 137,
-      wallet,
-      creds,
-      signatureType: parseInt(process.env.SIGNATURE_TYPE || '1'),
-      proxyWallet: process.env.PROXY_WALLET_ADDRESS,
-      tokenID: tokenId,
-      price: 0.05,
-      size: 1.0,
-      buyOrSell: 'BUY',
-      feeRateBps,
-      negRisk,
-      orderType: 'FOK',
-    });
-    console.log('\n✅ RESP:', JSON.stringify(resp));
-  } catch (e) {
-    console.log('\n❌ ERRO:', e.message);
+  // Testa 3 configurações de signatureType para descobrir qual funciona
+  const configs = [
+    { label: 'sigType=1 POLY_PROXY  (proxy wallet como maker)', signatureType: 1, proxyWallet: process.env.PROXY_WALLET_ADDRESS },
+    { label: 'sigType=0 EOA         (EOA como maker, sem proxy)', signatureType: 0, proxyWallet: undefined },
+    { label: 'sigType=2 GNOSIS_SAFE (proxy wallet como maker)', signatureType: 2, proxyWallet: process.env.PROXY_WALLET_ADDRESS },
+  ];
+
+  for (const cfg of configs) {
+    console.log('\n--- Testando:', cfg.label, '---');
+    try {
+      const resp = await postOrderNativeV5({
+        clobUrl: 'https://clob.polymarket.com',
+        chainId: 137,
+        wallet,
+        creds,
+        signatureType: cfg.signatureType,
+        proxyWallet: cfg.proxyWallet,
+        tokenID: tokenId,
+        price: 0.05,
+        size: 1.0,
+        buyOrSell: 'BUY',
+        feeRateBps,
+        negRisk,
+        orderType: 'FOK',
+      });
+      console.log('RESP:', JSON.stringify(resp));
+    } catch (e) {
+      console.log('ERRO:', e.message);
+    }
   }
 }
 
