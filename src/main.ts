@@ -6,6 +6,7 @@ import { store } from './store';
 import { startConvergenceScalper } from './convergenceScalper';
 import { startFinanceScanner } from './financeScanner';
 import { startMultiScanner } from './multiScanner';
+import { startWeatherScanner } from './weatherScanner';
 import { sendStartupEmail } from './notifier';
 
 function sleep(ms: number): Promise<void> {
@@ -53,6 +54,7 @@ async function main(): Promise<void> {
     startConvergenceScalper(isSimulation),
     startFinanceScanner(isSimulation),
     startMultiScanner(isSimulation),
+    startWeatherScanner(isSimulation),
     watchWalletBalance(),
   ]);
 }
