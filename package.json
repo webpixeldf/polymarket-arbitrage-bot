@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@polymarket/clob-client": "^4.0.0",
+    "clob-v5": "npm:@polymarket/clob-client@5.8.1",
     "@polymarket/order-utils": "^2.0.0",
     "@types/express": "^5.0.6",
     "@types/nodemailer": "^8.0.1",

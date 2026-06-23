@@ -1,71 +1,11 @@
 import axios from 'axios';
-import { createHmac } from 'crypto';
 import { ethers } from 'ethers';
 import { ClobClient, OrderType, Side } from '@polymarket/clob-client';
 import { config } from './config';
 import { GammaMarket, OrderBook } from './models';
 
-// V5 do clob-client normaliza base64url → base64 antes de decodificar o secret.
-// O v4 usa Buffer.from(secret,"base64") que DESCARTA '-' e '_', gerando HMAC errado
-// quando o servidor retorna o secret em formato base64url (comportamento documentado no v5).
-function buildHmacSig(secret: string, ts: number, method: string, path: string, body: string): string {
-  const normalized = secret.replace(/-/g, '+').replace(/_/g, '/');
-  const key = Buffer.from(normalized, 'base64');
-  const message = `${ts}${method}${path}${body}`;
-  const sig = createHmac('sha256', key).update(message).digest('base64');
-  return sig.replace(/\+/g, '-').replace(/\//g, '_');
-}
-
-async function postOrderV5(order: any, orderType: 'FOK' | 'GTC'): Promise<any> {
-  const sideStr = (order.side === 0) ? 'BUY' : 'SELL';
-  const payload = {
-    deferExec: false,
-    order: {
-      salt:          parseInt(order.salt, 10),
-      maker:         order.maker,
-      signer:        order.signer,
-      taker:         order.taker,
-      tokenId:       order.tokenId,
-      makerAmount:   order.makerAmount,
-      takerAmount:   order.takerAmount,
-      side:          sideStr,
-      expiration:    order.expiration,
-      nonce:         order.nonce,
-      feeRateBps:    order.feeRateBps,
-      signatureType: order.signatureType,
-      signature:     order.signature,
-    },
-    owner:     config.apiKey,
-    orderType,
-  };
-  const ts   = Math.floor(Date.now() / 1000);
-  const body = JSON.stringify(payload);
-  const sig  = buildHmacSig(config.apiSecret, ts, 'POST', '/order', body);
-  try {
-    const resp = await axios.post(`${config.clobApiUrl}/order`, payload, {
-      headers: {
-        POLY_ADDRESS:    order.signer,
-        POLY_SIGNATURE:  sig,
-        POLY_TIMESTAMP:  `${ts}`,
-        POLY_API_KEY:    config.apiKey,
-        POLY_PASSPHRASE: config.apiPassphrase,
-        'Content-Type':  'application/json',
-        'User-Agent':    '@polymarket/clob-client',
-        'Accept':        '*/*',
-        'Connection':    'keep-alive',
-      },
-      timeout: 10_000,
-    });
-    return resp.data;
-  } catch (err: any) {
-    if (err.response?.data) {
-      console.error(`[API] POST /order ${err.response.status}: ${JSON.stringify(err.response.data)}`);
-      console.error(`[API] Payload: ${body.slice(0, 300)}`);
-      return err.response.data;
-    }
-    throw err;
-  }
-}
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { postOrderNativeV5 } = require('./v5bridge');
 
 export function createClobClient(): ClobClient {
   const wallet = new ethers.Wallet(config.privateKey);
@@ -171,7 +111,7 @@ export async function getOrderBookData(tokenId: string): Promise<OrderBookData> 
 }
 
 export async function sellShares(
-  client: ClobClient,
+  _client: ClobClient,
   tokenId: string,
   price: number,
   shares: number,
@@ -191,8 +131,14 @@ export async function sellShares(
       negRisk    = nr.data?.neg_risk  === true;
       feeRateBps = fee.data?.base_fee ?? 0;
     } catch { /* mantém defaults */ }
-    const order = await client.createOrder({ tokenID: tokenId, price, size: shares, side: Side.SELL, feeRateBps }, { negRisk });
-    const resp  = await postOrderV5(order, 'FOK');
+    const wallet = new ethers.Wallet(config.privateKey);
+    const creds  = { key: config.apiKey, secret: config.apiSecret, passphrase: config.apiPassphrase };
+    const resp = await postOrderNativeV5({
+      clobUrl: config.clobApiUrl, chainId: 137, wallet, creds,
+      signatureType: config.signatureType, proxyWallet: config.proxyWalletAddress,
+      tokenID: tokenId, price, size: shares, buyOrSell: 'SELL',
+      feeRateBps, negRisk, orderType: 'FOK',
+    });
     console.error(`[API] SELL resp: ${JSON.stringify(resp)}`);
     return (resp as any).orderID ?? null;
   } catch (err) {
@@ -202,7 +148,7 @@ export async function sellShares(
 }
 
 export async function buyShares(
-  client: ClobClient,
+  _client: ClobClient,
   tokenId: string,
   price: number,
   shares: number,
@@ -216,9 +162,7 @@ export async function buyShares(
   }
   try {
     const limitPrice = parseFloat(Math.min(price + slippage, 0.99).toFixed(4));
-    // Busca negRisk e feeRateBps reais do mercado (ambos afetam a assinatura EIP-712)
-    let negRisk = false;
-    let feeRateBps = 0;
+    let negRisk = false, feeRateBps = 0;
     try {
       const [nr, fee] = await Promise.all([
         axios.get(`${config.clobApiUrl}/neg-risk`,  { params: { token_id: tokenId }, timeout: 5000 }),
@@ -228,19 +172,16 @@ export async function buyShares(
       feeRateBps = fee.data?.base_fee ?? 0;
     } catch { /* mantém defaults */ }
 
-    // v4.0.0 API: createOrder (limite) + postOrder (FOK ou GTC)
-    const order = await client.createOrder({
-      tokenID    : tokenId,
-      price      : limitPrice,
-      size       : parseFloat(shares.toFixed(6)),
-      side       : Side.BUY,
-      feeRateBps,           // taxa real do mercado na assinatura EIP-712
-    }, { negRisk });
-    const postType = (orderType === OrderType.GTC || orderType === OrderType.GTD)
-      ? OrderType.GTC
-      : OrderType.FOK;
-    console.error(`[API] ORDER negRisk=${negRisk} fee=${feeRateBps} sigType=${(order as any).signatureType} maker=${((order as any).maker||'').slice(0,10)}...`);
-    const resp = await postOrderV5(order, postType === OrderType.GTC ? 'GTC' : 'FOK');
+    const postType = (orderType === OrderType.GTC || orderType === OrderType.GTD) ? 'GTC' : 'FOK';
+    const wallet = new ethers.Wallet(config.privateKey);
+    const creds  = { key: config.apiKey, secret: config.apiSecret, passphrase: config.apiPassphrase };
+    console.error(`[API] BUY v5 negRisk=${negRisk} fee=${feeRateBps} price=${limitPrice} shares=${shares.toFixed(2)} type=${postType}`);
+    const resp = await postOrderNativeV5({
+      clobUrl: config.clobApiUrl, chainId: 137, wallet, creds,
+      signatureType: config.signatureType, proxyWallet: config.proxyWalletAddress,
+      tokenID: tokenId, price: limitPrice, size: parseFloat(shares.toFixed(6)),
+      buyOrSell: 'BUY', feeRateBps, negRisk, orderType: postType,
+    });
     console.error(`[API] ${postType} resp: ${JSON.stringify(resp)}`);
     return (resp as any).orderID ?? (resp as any).order?.id ?? null;
   } catch (err) {
