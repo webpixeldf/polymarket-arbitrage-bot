@@ -439,6 +439,13 @@ async function scanWeatherMarkets(simulate: boolean, client: ReturnType<typeof c
     catch { continue; }
     const [yesTokenId, noTokenId] = tokenIds;
 
+    // Pula mercados cujo endDate já passou — CLOB não aceita ordens após expiração
+    const msToEnd = new Date(market.endDate).getTime() - now;
+    if (msToEnd < 0) {
+      console.error(`[Weather] ⏰ expirado (endDate ${market.endDate.slice(0, 10)}) | "${question.slice(0, 55)}"`);
+      continue;
+    }
+
     const betSide: 'YES' | 'NO' = yesWins ? 'YES' : 'NO';
     const tokenId = betSide === 'YES' ? yesTokenId : noTokenId;
 
@@ -450,7 +457,6 @@ async function scanWeatherMarkets(simulate: boolean, client: ReturnType<typeof c
       : `${actualC.toFixed(1)}°C`;
 
     if (ob.bestAsk === null || ob.bestAsk > MAX_ENTRY) {
-      // Loga sempre para diagnóstico — mostra preço atual do lado correto
       console.error(
         `[Weather] 🔍 ${betSide}@${ob.bestAsk !== null ? (ob.bestAsk * 100).toFixed(1)+'¢' : 'sem ask'} ` +
         `(máx ${(MAX_ENTRY * 100).toFixed(0)}¢) | Real: ${actualDisp} | "${question.slice(0, 55)}"`
@@ -461,9 +467,13 @@ async function scanWeatherMarkets(simulate: boolean, client: ReturnType<typeof c
     entries++;
     entered.add(`weather-${market.conditionId}`);
 
-    const shares    = parseFloat((BET_USDC / ob.bestAsk).toFixed(2));
-    const potential = (BET_USDC * (1 / ob.bestAsk - 1)).toFixed(2);
-    const hoursLeft = (new Date(market.endDate).getTime() - now) / 3_600_000;
+    // limitPrice com slippage — shares calculadas sobre o limitPrice para que
+    // makerAmount = shares × limitPrice = BET_USDC (não ultrapassa o saldo)
+    const slippage   = 0.03;                                           // 3¢ tolerância
+    const limitPrice = parseFloat(Math.min(ob.bestAsk + slippage, 0.99).toFixed(4));
+    const shares     = parseFloat((BET_USDC / limitPrice).toFixed(2)); // gasta BET_USDC, não mais
+    const potential  = (BET_USDC * (1 / ob.bestAsk - 1)).toFixed(2);
+    const hoursLeft  = msToEnd / 3_600_000;
     const label = question.slice(0, 55);
 
     console.error(
@@ -472,7 +482,8 @@ async function scanWeatherMarkets(simulate: boolean, client: ReturnType<typeof c
     );
 
     if (!simulate) {
-      const orderId = await buyShares(client, tokenId, ob.bestAsk, shares, simulate, 0.05);
+      // Passa limitPrice já calculado (bestAsk + 3¢ slippage); shares = BET_USDC / limitPrice
+      const orderId = await buyShares(client, tokenId, limitPrice, shares, simulate, 0);
       if (!orderId) {
         console.error(`[Weather] ⚠️  FOK cancelado: ${label}`);
         entered.delete(`weather-${market.conditionId}`);
@@ -497,7 +508,6 @@ async function scanWeatherMarkets(simulate: boolean, client: ReturnType<typeof c
       ].join('\n')
     );
 
-    const msToEnd = new Date(market.endDate).getTime() - Date.now();
     setTimeout(async () => {
       try {
         await settle({ label, betSide, entryPrice: ob.bestAsk!, shares, simulate, marketId: market.conditionId });
