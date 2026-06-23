@@ -59,12 +59,22 @@ async function main() {
     const ordersNew = await clientNew.getOpenOrders();
     console.log('✅ Novas creds OK:', JSON.stringify(ordersNew).slice(0, 200));
 
-    // Testa ordem com novas credenciais
-    console.log('\n=== 3c) ORDEM com novas credenciais ===');
+    // Verifica proxy wallet correto para a EOA
+    console.log('\n=== 3c) PROXY WALLET CORRETO para esta EOA ===');
+    try {
+      const axios = require('axios');
+      const pw = await axios.get('https://clob.polymarket.com/proxy-wallet', { params: { address: EOA }, timeout: 8000 });
+      console.log('Proxy wallet real da EOA:', JSON.stringify(pw.data));
+      console.log('Proxy wallet no .env:    ', proxy);
+    } catch(e) { console.log('Erro /proxy-wallet:', e.response?.status, e.message); }
+
+    // Testa ordem e loga o objeto completo antes de enviar
+    console.log('\n=== 3d) ORDEM + log do objeto assinado ===');
     const order = await clientNew.createOrder(
       { tokenID: '30919109558246209971545892228598482722881502507049010402392877610451001659386', price: 0.05, size: 1.0, side: v5.Side.BUY },
       { negRisk: true }
     );
+    console.log('Ordem criada:', JSON.stringify(order, null, 2));
     const resp = await clientNew.postOrder(order, v5.OrderType.FOK, false);
     console.log('RESP:', JSON.stringify(resp));
   } catch (e) {
