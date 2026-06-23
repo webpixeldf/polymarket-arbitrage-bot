@@ -130,6 +130,69 @@ const CITIES: Record<string, CityData> = {
   'dar es salaam':      { lat: -6.7924,  lon:  39.2083,  tz: 'Africa/Dar_es_Salaam' },
   'kinshasa':           { lat: -4.3217,  lon:  15.3226,  tz: 'Africa/Kinshasa'       },
   'accra':              { lat:  5.6037,  lon:  -0.1870,  tz: 'Africa/Accra'          },
+  // Adicionais frequentes no Polymarket
+  'panama city':        { lat:  8.9936,  lon: -79.5197,  tz: 'America/Panama'         },
+  'tel aviv':           { lat: 32.0853,  lon:  34.7818,  tz: 'Asia/Jerusalem'         },
+  'jerusalem':          { lat: 31.7683,  lon:  35.2137,  tz: 'Asia/Jerusalem'         },
+  'charlotte':          { lat: 35.2271,  lon: -80.8431,  tz: 'America/New_York'       },
+  'nashville':          { lat: 36.1627,  lon: -86.7816,  tz: 'America/Chicago'        },
+  'memphis':            { lat: 35.1495,  lon: -90.0490,  tz: 'America/Chicago'        },
+  'new orleans':        { lat: 29.9511,  lon: -90.0715,  tz: 'America/Chicago'        },
+  'kansas city':        { lat: 39.0997,  lon: -94.5786,  tz: 'America/Chicago'        },
+  'salt lake city':     { lat: 40.7608,  lon:-111.8910,  tz: 'America/Denver'         },
+  'albuquerque':        { lat: 35.0844,  lon:-106.6504,  tz: 'America/Denver'         },
+  'tucson':             { lat: 32.2226,  lon:-110.9747,  tz: 'America/Phoenix'        },
+  'san diego':          { lat: 32.7157,  lon:-117.1611,  tz: 'America/Los_Angeles'    },
+  'san jose':           { lat: 37.3382,  lon:-121.8863,  tz: 'America/Los_Angeles'    },
+  'sacramento':         { lat: 38.5816,  lon:-121.4944,  tz: 'America/Los_Angeles'    },
+  'anchorage':          { lat: 61.2181,  lon:-149.9003,  tz: 'America/Anchorage'      },
+  'honolulu':           { lat: 21.3069,  lon:-157.8583,  tz: 'Pacific/Honolulu'       },
+  'winnipeg':           { lat: 49.8951,  lon: -97.1384,  tz: 'America/Winnipeg'       },
+  'edmonton':           { lat: 53.5461,  lon:-113.4938,  tz: 'America/Edmonton'       },
+  'quebec city':        { lat: 46.8139,  lon: -71.2080,  tz: 'America/Toronto'        },
+  'medellin':           { lat:  6.2442,  lon: -75.5812,  tz: 'America/Bogota'         },
+  'caracas':            { lat: 10.4806,  lon: -66.9036,  tz: 'America/Caracas'        },
+  'quito':              { lat: -0.1807,  lon: -78.4678,  tz: 'America/Guayaquil'      },
+  'la paz':             { lat:-16.5000,  lon: -68.1500,  tz: 'America/La_Paz'         },
+  'asuncion':           { lat:-25.2867,  lon: -57.6470,  tz: 'America/Asuncion'       },
+  'montevideo':         { lat:-34.9011,  lon: -56.1645,  tz: 'America/Montevideo'     },
+  'guadalajara':        { lat: 20.6597,  lon:-103.3496,  tz: 'America/Mexico_City'    },
+  'monterrey':          { lat: 25.6866,  lon:-100.3161,  tz: 'America/Monterrey'      },
+  'sofia':              { lat: 42.6977,  lon:  23.3219,  tz: 'Europe/Sofia'           },
+  'zagreb':             { lat: 45.8150,  lon:  15.9819,  tz: 'Europe/Zagreb'          },
+  'belgrade':           { lat: 44.8176,  lon:  20.4633,  tz: 'Europe/Belgrade'        },
+  'sarajevo':           { lat: 43.8563,  lon:  18.4131,  tz: 'Europe/Sarajevo'        },
+  'minsk':              { lat: 53.9045,  lon:  27.5615,  tz: 'Europe/Minsk'           },
+  'riga':               { lat: 56.9496,  lon:  24.1052,  tz: 'Europe/Riga'            },
+  'tallinn':            { lat: 59.4370,  lon:  24.7536,  tz: 'Europe/Tallinn'         },
+  'vilnius':            { lat: 54.6872,  lon:  25.2797,  tz: 'Europe/Vilnius'         },
+  'abu dhabi':          { lat: 24.4539,  lon:  54.3773,  tz: 'Asia/Dubai'             },
+  'muscat':             { lat: 23.5880,  lon:  58.3829,  tz: 'Asia/Muscat'            },
+  'doha':               { lat: 25.2854,  lon:  51.5310,  tz: 'Asia/Qatar'             },
+  'kuwait city':        { lat: 29.3759,  lon:  47.9774,  tz: 'Asia/Kuwait'            },
+  'amman':              { lat: 31.9454,  lon:  35.9284,  tz: 'Asia/Amman'             },
+  'beirut':             { lat: 33.8938,  lon:  35.5018,  tz: 'Asia/Beirut'            },
+  'baghdad':            { lat: 33.3152,  lon:  44.3661,  tz: 'Asia/Baghdad'           },
+  'islamabad':          { lat: 33.7294,  lon:  73.0931,  tz: 'Asia/Karachi'           },
+  'pyongyang':          { lat: 39.0392,  lon: 125.7625,  tz: 'Asia/Pyongyang'         },
+  'dili':               { lat: -8.5569,  lon: 125.5788,  tz: 'Asia/Dili'              },
+  'suva':               { lat:-18.1416,  lon: 178.4419,  tz: 'Pacific/Fiji'           },
+  'port moresby':       { lat: -9.4438,  lon: 147.1803,  tz: 'Pacific/Port_Moresby'  },
+  'darwin':             { lat:-12.4634,  lon: 130.8456,  tz: 'Australia/Darwin'       },
+  'hobart':             { lat:-42.8821,  lon: 147.3272,  tz: 'Australia/Hobart'       },
+  'lusaka':             { lat:-15.4166,  lon:  28.2833,  tz: 'Africa/Lusaka'          },
+  'harare':             { lat:-17.8252,  lon:  31.0335,  tz: 'Africa/Harare'          },
+  'kampala':            { lat:  0.3476,  lon:  32.5825,  tz: 'Africa/Kampala'         },
+  'kigali':             { lat: -1.9441,  lon:  30.0619,  tz: 'Africa/Kigali'          },
+  'antananarivo':       { lat:-18.8792,  lon:  47.5079,  tz: 'Indian/Antananarivo'    },
+  'dakar':              { lat: 14.7167,  lon: -17.4677,  tz: 'Africa/Dakar'           },
+  'abidjan':            { lat:  5.3600,  lon:  -4.0083,  tz: 'Africa/Abidjan'         },
+  'bamako':             { lat: 12.6392,  lon:  -8.0029,  tz: 'Africa/Bamako'          },
+  'ouagadougou':        { lat: 12.3647,  lon:  -1.5353,  tz: 'Africa/Ouagadougou'    },
+  'niamey':             { lat: 13.5137,  lon:   2.1098,  tz: 'Africa/Niamey'          },
+  'n\'djamena':         { lat: 12.1348,  lon:  15.0557,  tz: 'Africa/Ndjamena'        },
+  'khartoum':           { lat: 15.5007,  lon:  32.5599,  tz: 'Africa/Khartoum'        },
+  'mogadishu':          { lat:  2.0469,  lon:  45.3182,  tz: 'Africa/Mogadishu'       },
 };
 
 // ── Parsear questão ─────────────────────────────────────────────────────────
@@ -382,16 +445,16 @@ async function scanWeatherMarkets(simulate: boolean, client: ReturnType<typeof c
     const ob = await getOrderBookData(tokenId);
     await sleep(150);
 
+    const actualDisp = cond.unit === 'F'
+      ? `${(actualC * 9 / 5 + 32).toFixed(1)}°F`
+      : `${actualC.toFixed(1)}°C`;
+
     if (ob.bestAsk === null || ob.bestAsk > MAX_ENTRY) {
-      if (ob.bestAsk !== null && ob.bestAsk > 0.005) {
-        const actualDisp = cond.unit === 'F'
-          ? `${(actualC * 9 / 5 + 32).toFixed(1)}°F`
-          : `${actualC.toFixed(1)}°C`;
-        console.error(
-          `[Weather] ⏭  ${betSide}@${(ob.bestAsk * 100).toFixed(1)}¢ > ${(MAX_ENTRY * 100).toFixed(0)}¢ | ` +
-          `Real: ${actualDisp} → ${betSide} | "${question.slice(0, 50)}"`
-        );
-      }
+      // Loga sempre para diagnóstico — mostra preço atual do lado correto
+      console.error(
+        `[Weather] 🔍 ${betSide}@${ob.bestAsk !== null ? (ob.bestAsk * 100).toFixed(1)+'¢' : 'sem ask'} ` +
+        `(máx ${(MAX_ENTRY * 100).toFixed(0)}¢) | Real: ${actualDisp} | "${question.slice(0, 55)}"`
+      );
       continue;
     }
 
@@ -401,9 +464,6 @@ async function scanWeatherMarkets(simulate: boolean, client: ReturnType<typeof c
     const shares    = parseFloat((BET_USDC / ob.bestAsk).toFixed(2));
     const potential = (BET_USDC * (1 / ob.bestAsk - 1)).toFixed(2);
     const hoursLeft = (new Date(market.endDate).getTime() - now) / 3_600_000;
-    const actualDisp = cond.unit === 'F'
-      ? `${(actualC * 9 / 5 + 32).toFixed(1)}°F`
-      : `${actualC.toFixed(1)}°C`;
     const label = question.slice(0, 55);
 
     console.error(
