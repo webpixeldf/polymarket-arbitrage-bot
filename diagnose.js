@@ -1,6 +1,7 @@
 // Diagnóstico completo: L2 auth + on-chain balance + order test
 const { ClobClient, OrderType, Side } = require('@polymarket/clob-client');
 const { ethers } = require('ethers');
+const axios = require('axios');
 require('dotenv').config({ override: true });
 
 const CLOB_URL = 'https://clob.polymarket.com';
@@ -81,7 +82,6 @@ async function main() {
   // 4) Testa com payload manual incluindo deferExec:false (formato v5)
   console.log('\n=== TESTE payload manual com deferExec:false (v5 format) ===');
   try {
-    const axios = require('axios');
     const { buildPolyHmacSignature } = require('@polymarket/clob-client/dist/signing/hmac');
     const { buildClobEip712Signature } = require('@polymarket/clob-client/dist/signing/eip712');
 

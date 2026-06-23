@@ -119,7 +119,16 @@ export async function sellShares(
     return 'sim-order-id';
   }
   try {
-    const order = await client.createOrder({ tokenID: tokenId, price, size: shares, side: Side.SELL });
+    let negRisk = false, feeRateBps = 0;
+    try {
+      const [nr, fee] = await Promise.all([
+        axios.get(`${config.clobApiUrl}/neg-risk`, { params: { token_id: tokenId }, timeout: 5000 }),
+        axios.get(`${config.clobApiUrl}/fee-rate`, { params: { token_id: tokenId }, timeout: 5000 }),
+      ]);
+      negRisk    = nr.data?.neg_risk  === true;
+      feeRateBps = fee.data?.base_fee ?? 0;
+    } catch { /* mantém defaults */ }
+    const order = await client.createOrder({ tokenID: tokenId, price, size: shares, side: Side.SELL, feeRateBps }, { negRisk });
     const resp  = await client.postOrder(order, OrderType.FOK);
     console.error(`[API] SELL resp: ${JSON.stringify(resp)}`);
     return (resp as any).orderID ?? null;
@@ -188,8 +197,8 @@ export function nextRoundEndMs(roundMinutes: number): number {
 
 export async function getWalletBalance(client: ClobClient): Promise<number | null> {
   try {
-    const resp = await (client as any).getBalance();
-    const raw = resp?.balance ?? resp?.collateral ?? resp;
+    const resp = await client.getBalanceAllowance({ asset_type: 'USDC' } as any);
+    const raw = (resp as any)?.balance ?? (resp as any)?.collateral ?? resp;
     const num = parseFloat(String(raw));
     return isNaN(num) ? null : num;
   } catch {

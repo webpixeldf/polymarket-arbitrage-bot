@@ -10,7 +10,7 @@ function required(name: string): string {
 export const config = {
   privateKey: process.env.PRIVATE_KEY ?? '',
   proxyWalletAddress: process.env.PROXY_WALLET_ADDRESS ?? '',
-  signatureType: parseInt(process.env.SIGNATURE_TYPE ?? '2', 10),
+  signatureType: parseInt(process.env.SIGNATURE_TYPE ?? '1', 10),
 
   markets: (process.env.MARKETS ?? 'btc').split(',').map(m => m.trim().toLowerCase()),
 
