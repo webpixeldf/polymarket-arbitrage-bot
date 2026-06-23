@@ -20,6 +20,7 @@ const MAX_HOURS          = parseFloat(process.env.MULTI_MAX_HOURS         ?? '24
 const CONSENSUS_MIN      = parseFloat(process.env.MULTI_CONSENSUS_MIN     ?? '0.95');
 const CONSENSUS_MAX_HOURS= parseFloat(process.env.MULTI_CONSENSUS_HOURS   ?? '12');
 const CRYPTO_FIN_MAX_H   = parseFloat(process.env.MULTI_CRYPTOFIN_HOURS   ?? '2');
+const MIN_LIQUIDITY      = parseFloat(process.env.MULTI_MIN_LIQUIDITY     ?? '50'); // distressed sellers = alta liquidez = resultado já conhecido
 const SCAN_INTERVAL      = 5 * 60_000; // scan a cada 5 minutos
 
 // ── Tipos ──────────────────────────────────────────────────────────────────
@@ -346,20 +347,20 @@ async function scanAll(simulate: boolean, client: ReturnType<typeof createClobCl
       checked++;
 
       const minP = Math.max(MIN_PRICE, CONSENSUS_MIN);
-      const yesOk = yesOb.bestAsk !== null && yesOb.bestAsk >= minP && yesOb.bestAsk <= MAX_PRICE && yesOb.liquidityAtAsk >= BET_USDC;
-      const noOk  = noOb.bestAsk  !== null && noOb.bestAsk  >= minP && noOb.bestAsk  <= MAX_PRICE && noOb.liquidityAtAsk  >= BET_USDC;
+      const yesOk = yesOb.bestAsk !== null && yesOb.bestAsk >= minP && yesOb.bestAsk <= MAX_PRICE && yesOb.liquidityAtAsk >= MIN_LIQUIDITY;
+      const noOk  = noOb.bestAsk  !== null && noOb.bestAsk  >= minP && noOb.bestAsk  <= MAX_PRICE && noOb.liquidityAtAsk  >= MIN_LIQUIDITY;
 
       if (yesOk) {
         betSide = 'YES'; tokenId = yesTokenId; entryPrice = yesOb.bestAsk!;
-        verifyReason = `Consenso ${(yesOb.bestAsk!*100).toFixed(0)}¢ | resolve em ${hoursLeft.toFixed(1)}h`;
+        verifyReason = `Consenso ${(yesOb.bestAsk!*100).toFixed(0)}¢ liq:$${yesOb.liquidityAtAsk.toFixed(0)} | resolve em ${hoursLeft.toFixed(1)}h`;
       } else if (noOk) {
         betSide = 'NO'; tokenId = noTokenId; entryPrice = noOb.bestAsk!;
-        verifyReason = `Consenso ${(noOb.bestAsk!*100).toFixed(0)}¢ | resolve em ${hoursLeft.toFixed(1)}h`;
+        verifyReason = `Consenso ${(noOb.bestAsk!*100).toFixed(0)}¢ liq:$${noOb.liquidityAtAsk.toFixed(0)} | resolve em ${hoursLeft.toFixed(1)}h`;
       } else {
         // Log diagnóstico
         const yP = yesOb.bestAsk !== null ? `YES:${(yesOb.bestAsk*100).toFixed(0)}¢ liq:$${yesOb.liquidityAtAsk.toFixed(1)}` : 'YES:sem ask';
         const nP = noOb.bestAsk  !== null ? `NO:${(noOb.bestAsk*100).toFixed(0)}¢ liq:$${noOb.liquidityAtAsk.toFixed(1)}`   : 'NO:sem ask';
-        console.error(`[Multi] ⏭  CLOB fora da faixa ${(minP*100).toFixed(0)}-${(MAX_PRICE*100).toFixed(0)}¢ | ${yP} | ${nP} | "${question.slice(0,40)}"`);
+        console.error(`[Multi] ⏭  CLOB fora da faixa ${(minP*100).toFixed(0)}-${(MAX_PRICE*100).toFixed(0)}¢ ou liq<$${MIN_LIQUIDITY} | ${yP} | ${nP} | "${question.slice(0,40)}"`);
         continue;
       }
     }
@@ -424,7 +425,7 @@ export async function startMultiScanner(simulate: boolean): Promise<void> {
   console.error(
     `[Multi] Iniciando — faixa: ${(MIN_PRICE*100).toFixed(0)}-${(MAX_PRICE*100).toFixed(0)}¢ | ` +
     `consensus: ≤${CONSENSUS_MAX_HOURS}h mín ${(CONSENSUS_MIN*100).toFixed(0)}¢ | ` +
-    `crypto/fin: ≤${CRYPTO_FIN_MAX_H}h | aposta: $${BET_USDC} | scan: 5min`
+    `liq mín: $${MIN_LIQUIDITY} | crypto/fin: ≤${CRYPTO_FIN_MAX_H}h | aposta: $${BET_USDC} | scan: 5min`
   );
 
   while (true) {
