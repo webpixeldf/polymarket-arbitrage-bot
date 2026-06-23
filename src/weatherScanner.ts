@@ -473,7 +473,7 @@ async function scanWeatherMarkets(simulate: boolean, client: ReturnType<typeof c
     );
 
     if (!simulate) {
-      const orderId = await buyShares(client, tokenId, ob.bestAsk, shares, simulate, 0.05, OrderType.GTC);
+      const orderId = await buyShares(client, tokenId, ob.bestAsk, shares, simulate, 0.05, OrderType.FAK);
       if (!orderId) {
         console.error(`[Weather] ⚠️  FOK cancelado: ${label}`);
         entered.delete(`weather-${market.conditionId}`);
