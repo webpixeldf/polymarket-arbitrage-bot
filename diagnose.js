@@ -1,9 +1,19 @@
 // Diagnóstico completo: L2 auth + balance + order test com token vivo
 const { ClobClient, OrderType, Side } = require('@polymarket/clob-client');
-const { buildPolyHmacSignature } = require('@polymarket/clob-client/dist/signing/hmac');
+const { buildPolyHmacSignature: buildPolyHmacV4 } = require('@polymarket/clob-client/dist/signing/hmac');
+const { createHmac } = require('crypto');
 const { ethers } = require('ethers');
 const axios = require('axios');
 require('dotenv').config({ override: true });
+
+// V5 HMAC: normaliza base64url antes de decodificar
+function buildHmacV5(secret, ts, method, path, body) {
+  const normalized = secret.replace(/-/g, '+').replace(/_/g, '/');
+  const key = Buffer.from(normalized, 'base64');
+  const message = `${ts}${method}${path}${body || ''}`;
+  const sig = createHmac('sha256', key).update(message).digest('base64');
+  return sig.replace(/\+/g, '-').replace(/\//g, '_');
+}
 
 const CLOB_URL = 'https://clob.polymarket.com';
 const GAMMA_URL = 'https://gamma-api.polymarket.com';
@@ -48,6 +58,17 @@ async function main() {
   } catch (e) {
     console.error('Balance error:', e.message);
   }
+
+  // diagnóstico do secret
+  console.log('\n=== DIAGNÓSTICO HMAC ===');
+  const secretHasUrlChars = /[-_]/.test(creds.secret);
+  console.log(`Secret tem base64url chars (-/_): ${secretHasUrlChars ? 'SIM ⚠️  (v4 gera HMAC errado!)' : 'NÃO ✅ (v4 e v5 idênticos)'}`);
+  const ts0 = Math.floor(Date.now() / 1000);
+  const hmacV4 = buildPolyHmacV4(creds.secret, ts0, 'GET', '/data/orders', '');
+  const hmacV5 = buildHmacV5(creds.secret, ts0, 'GET', '/data/orders', '');
+  console.log(`HMAC v4: ${hmacV4.slice(0, 20)}...`);
+  console.log(`HMAC v5: ${hmacV5.slice(0, 20)}...`);
+  console.log(`HMAC igual? ${hmacV4 === hmacV5 ? 'SIM ✅' : 'NÃO ❌ — v5 necessário!'}`);
 
   // 3) Busca token ID de mercado weather NÃO expirado
   console.log('\n=== 3) BUSCANDO MERCADO WEATHER ABERTO ===');
@@ -172,7 +193,10 @@ async function main() {
 
     const ts   = Math.floor(Date.now() / 1000);
     const body = JSON.stringify(payload);
-    const sig  = buildPolyHmacSignature(creds.secret, ts, 'POST', '/order', body);
+    // Usa HMAC v5 (normaliza base64url) para corrigir bug do v4 com secrets que contêm - e _
+    const sig  = buildHmacV5(creds.secret, ts, 'POST', '/order', body);
+    const sigV4 = buildPolyHmacV4(creds.secret, ts, 'POST', '/order', body);
+    console.log(`HMAC v5: ${sig.slice(0, 20)}... | v4: ${sigV4.slice(0, 20)}... | igual: ${sig === sigV4}`);
 
     console.log('Payload enviado:', JSON.stringify({...payload, order: {...payload.order, signature: payload.order.signature.slice(0,20)+'...'}}, null, 2));
 

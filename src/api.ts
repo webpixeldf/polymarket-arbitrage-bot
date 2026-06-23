@@ -1,17 +1,21 @@
 import axios from 'axios';
+import { createHmac } from 'crypto';
 import { ethers } from 'ethers';
 import { ClobClient, OrderType, Side } from '@polymarket/clob-client';
 import { config } from './config';
 import { GammaMarket, OrderBook } from './models';
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { buildPolyHmacSignature } = require('@polymarket/clob-client/dist/signing/hmac');
+// V5 do clob-client normaliza base64url → base64 antes de decodificar o secret.
+// O v4 usa Buffer.from(secret,"base64") que DESCARTA '-' e '_', gerando HMAC errado
+// quando o servidor retorna o secret em formato base64url (comportamento documentado no v5).
+function buildHmacSig(secret: string, ts: number, method: string, path: string, body: string): string {
+  const normalized = secret.replace(/-/g, '+').replace(/_/g, '/');
+  const key = Buffer.from(normalized, 'base64');
+  const message = `${ts}${method}${path}${body}`;
+  const sig = createHmac('sha256', key).update(message).digest('base64');
+  return sig.replace(/\+/g, '-').replace(/\//g, '_');
+}
 
-/**
- * Envia ordem no formato v5 do clob-client (inclui deferExec:false).
- * O servidor exige esse campo desde a migração para v5; sem ele retorna
- * "invalid order version, please use the latest clob-client".
- */
 async function postOrderV5(order: any, orderType: 'FOK' | 'GTC'): Promise<any> {
   const sideStr = (order.side === 0) ? 'BUY' : 'SELL';
   const payload = {
@@ -36,7 +40,7 @@ async function postOrderV5(order: any, orderType: 'FOK' | 'GTC'): Promise<any> {
   };
   const ts   = Math.floor(Date.now() / 1000);
   const body = JSON.stringify(payload);
-  const sig  = buildPolyHmacSignature(config.apiSecret, ts, 'POST', '/order', body);
+  const sig  = buildHmacSig(config.apiSecret, ts, 'POST', '/order', body);
   try {
     const resp = await axios.post(`${config.clobApiUrl}/order`, payload, {
       headers: {
@@ -54,10 +58,9 @@ async function postOrderV5(order: any, orderType: 'FOK' | 'GTC'): Promise<any> {
     });
     return resp.data;
   } catch (err: any) {
-    // Axios joga exceção em 4xx/5xx — retorna o body para ser logado pelo chamador
     if (err.response?.data) {
       console.error(`[API] POST /order ${err.response.status}: ${JSON.stringify(err.response.data)}`);
-      console.error(`[API] Payload enviado: ${body.slice(0, 300)}`);
+      console.error(`[API] Payload: ${body.slice(0, 300)}`);
       return err.response.data;
     }
     throw err;
