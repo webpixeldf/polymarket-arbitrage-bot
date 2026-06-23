@@ -1,10 +1,12 @@
-// Diagnóstico completo: L2 auth + on-chain balance + order test
+// Diagnóstico completo: L2 auth + balance + order test com token vivo
 const { ClobClient, OrderType, Side } = require('@polymarket/clob-client');
+const { buildPolyHmacSignature } = require('@polymarket/clob-client/dist/signing/hmac');
 const { ethers } = require('ethers');
 const axios = require('axios');
 require('dotenv').config({ override: true });
 
 const CLOB_URL = 'https://clob.polymarket.com';
+const GAMMA_URL = 'https://gamma-api.polymarket.com';
 
 async function main() {
   const pk = process.env.PRIVATE_KEY;
@@ -17,22 +19,20 @@ async function main() {
   console.log('\n=== ADDRESSES ===');
   console.log('EOA:  ', EOA);
   console.log('Proxy:', proxy);
-  console.log('SigType:', process.env.SIGNATURE_TYPE);
+  console.log('SigType:', process.env.SIGNATURE_TYPE ?? '1');
 
   const creds = {
     key: process.env.API_KEY,
     secret: process.env.API_SECRET,
     passphrase: process.env.API_PASSPHRASE,
   };
-  console.log('\n=== CREDENCIAIS ===');
-  console.log('Key:', creds.key);
-  console.log('Secret:', creds.secret?.slice(0, 10) + '...');
+  console.log('API Key:', creds.key?.slice(0, 12) + '...');
 
   const sigType = parseInt(process.env.SIGNATURE_TYPE ?? '1');
   const client = new ClobClient(CLOB_URL, 137, wallet, creds, sigType, proxy);
 
-  // 1) Teste L2 auth com GET /orders
-  console.log('\n=== TESTE L2 AUTH (GET /orders) ===');
+  // 1) Teste L2 auth
+  console.log('\n=== 1) TESTE L2 AUTH (GET /orders) ===');
   try {
     const orders = await client.getOpenOrders();
     console.log('✅ L2 auth OK — open orders:', JSON.stringify(orders).slice(0, 200));
@@ -40,8 +40,8 @@ async function main() {
     console.error('❌ L2 auth FALHOU:', e.message);
   }
 
-  // 2) Balance/allowance
-  console.log('\n=== BALANCE/ALLOWANCE ===');
+  // 2) Balance
+  console.log('\n=== 2) BALANCE/ALLOWANCE ===');
   try {
     const bal = await client.getBalanceAllowance({ asset_type: 'USDC' });
     console.log('USDC:', JSON.stringify(bal));
@@ -49,27 +49,105 @@ async function main() {
     console.error('Balance error:', e.message);
   }
 
-  // 3) Testa ordem com feeRateBps=1000 + deferExec:false (formato v5 completo)
-  const TOKEN_ID = '56441613474608958357488383796816307365995276962960033087501461366776172243406';
-  console.log('\n=== TESTE ORDER (feeRateBps real + deferExec:false) ===');
+  // 3) Busca token ID de mercado weather NÃO expirado
+  console.log('\n=== 3) BUSCANDO MERCADO WEATHER ABERTO ===');
+  let TOKEN_ID = null;
+  let negRisk = false;
+  let feeRateBps = 0;
+  let foundMarket = null;
   try {
-    const { buildPolyHmacSignature } = require('@polymarket/clob-client/dist/signing/hmac');
+    const now = Date.now();
+    let offset = 0;
+    const limit = 100;
+    while (offset < 600 && !TOKEN_ID) {
+      const resp = await axios.get(`${GAMMA_URL}/markets`, {
+        params: { active: true, limit, offset, order: 'endDate', ascending: true },
+        timeout: 15000,
+      });
+      const markets = resp.data;
+      if (!markets.length) break;
+      for (const m of markets) {
+        if (!m.question) continue;
+        const q = m.question.toLowerCase();
+        if (!q.includes('temperature') && !q.includes('celsius') && !q.includes('degrees')) continue;
+        if (!m.endDate) continue;
+        const msToEnd = new Date(m.endDate).getTime() - now;
+        if (msToEnd < 0) continue;  // expirado
+        const ids = JSON.parse(m.clobTokenIds || '[]');
+        if (!ids.length) continue;
+        TOKEN_ID = ids[0];
+        foundMarket = m;
+        console.log(`✅ Mercado aberto: "${m.question.slice(0, 70)}"`);
+        console.log(`   endDate: ${m.endDate} (${(msToEnd/3_600_000).toFixed(1)}h restantes)`);
+        console.log(`   tokenId: ${TOKEN_ID}`);
+        break;
+      }
+      offset += limit;
+    }
+    if (!TOKEN_ID) {
+      console.log('⚠️  Nenhum mercado weather aberto encontrado — usando token hardcoded para diagnóstico');
+      TOKEN_ID = '56441613474608958357488383796816307365995276962960033087501461366776172243406';
+    }
+  } catch (e) {
+    console.error('Gamma API error:', e.message);
+    TOKEN_ID = '56441613474608958357488383796816307365995276962960033087501461366776172243406';
+  }
 
-    const feeResp = await axios.get(`https://clob.polymarket.com/fee-rate`, {params:{token_id:TOKEN_ID}});
-    console.log('fee-rate:', JSON.stringify(feeResp.data));
-    const feeRateBps = feeResp.data?.base_fee ?? 0;
+  // 4) Busca fee-rate e neg-risk do token
+  console.log('\n=== 4) FEE-RATE + NEG-RISK ===');
+  try {
+    const [feeResp, nrResp] = await Promise.all([
+      axios.get(`${CLOB_URL}/fee-rate`, { params: { token_id: TOKEN_ID }, timeout: 5000 }),
+      axios.get(`${CLOB_URL}/neg-risk`, { params: { token_id: TOKEN_ID }, timeout: 5000 }),
+    ]);
+    feeRateBps = feeResp.data?.base_fee ?? 0;
+    negRisk = nrResp.data?.neg_risk === true;
+    console.log(`fee_rate base_fee=${feeRateBps}  neg_risk=${negRisk}`);
+  } catch (e) {
+    console.error('fee/negRisk error:', e.message);
+  }
 
-    const order = await client.createOrder({
+  // 5) Orderbook do token
+  console.log('\n=== 5) ORDERBOOK ===');
+  let bestAsk = 0.5;
+  try {
+    const ob = await client.getOrderBook(TOKEN_ID);
+    const asks = ob.asks || [];
+    if (asks.length) {
+      bestAsk = parseFloat(asks[asks.length - 1].price ?? asks[0].price);
+      console.log(`bestAsk=${bestAsk}  spread asks: ${asks.slice(0, 3).map(a => a.price).join(', ')}`);
+    } else {
+      console.log('Sem asks no orderbook');
+    }
+  } catch (e) {
+    console.error('Orderbook error:', e.message);
+  }
+
+  // 6) Cria ordem (SEM enviar)
+  console.log('\n=== 6) CRIA ORDEM (createOrder) ===');
+  let order = null;
+  try {
+    const limitPrice = Math.min(bestAsk + 0.03, 0.99);
+    order = await client.createOrder({
       tokenID: TOKEN_ID,
-      price: 0.20,
-      size: 25.0,
+      price: parseFloat(limitPrice.toFixed(4)),
+      size: 1.0,
       side: Side.BUY,
       feeRateBps,
-    }, { negRisk: true });
+    }, { negRisk });
+    console.log(`✅ Ordem criada:`);
+    console.log(`   maker=${order.maker}  signer=${order.signer}`);
+    console.log(`   sigType=${order.signatureType}  fee=${order.feeRateBps}  negRisk=${negRisk}`);
+    console.log(`   makerAmt=${order.makerAmount}  takerAmt=${order.takerAmount}  side=${order.side}`);
+    console.log(`   sig=${order.signature.slice(0, 20)}...`);
+  } catch (e) {
+    console.error('❌ createOrder FALHOU:', e.message);
+    return;
+  }
 
-    console.log('Ordem criada: signer=%s sigType=%d fee=%s', order.signer, order.signatureType, order.feeRateBps);
-
-    // Payload v5 com deferExec:false
+  // 7) Envia ordem com formato v5 (deferExec:false + User-Agent + corretos L2 headers)
+  console.log('\n=== 7) POST /order (v5 format: deferExec:false + User-Agent) ===');
+  try {
     const sideStr = (order.side === 0) ? 'BUY' : 'SELL';
     const payload = {
       deferExec: false,
@@ -96,7 +174,9 @@ async function main() {
     const body = JSON.stringify(payload);
     const sig  = buildPolyHmacSignature(creds.secret, ts, 'POST', '/order', body);
 
-    const resp = await axios.post('https://clob.polymarket.com/order', payload, {
+    console.log('Payload enviado:', JSON.stringify({...payload, order: {...payload.order, signature: payload.order.signature.slice(0,20)+'...'}}, null, 2));
+
+    const resp = await axios.post(`${CLOB_URL}/order`, payload, {
       headers: {
         POLY_ADDRESS:    order.signer,
         POLY_SIGNATURE:  sig,
@@ -104,6 +184,9 @@ async function main() {
         POLY_API_KEY:    creds.key,
         POLY_PASSPHRASE: creds.passphrase,
         'Content-Type':  'application/json',
+        'User-Agent':    '@polymarket/clob-client',
+        'Accept':        '*/*',
+        'Connection':    'keep-alive',
       },
       timeout: 10_000,
     });
@@ -111,73 +194,29 @@ async function main() {
   } catch (e) {
     if (e.response) {
       console.error('❌ HTTP', e.response.status, JSON.stringify(e.response.data));
+      console.error('   (se 400 "invalid order version" → order format problem)');
+      console.error('   (se 400 "not enough balance" → funcionou! saldo insuficiente)');
+      console.error('   (se 400 "market closed" → mercado expirou)');
     } else {
-      console.error('Order test erro:', e.message);
+      console.error('❌ Erro de rede:', e.message);
     }
   }
 
-  // 4) Testa com payload manual incluindo deferExec:false (formato v5)
-  console.log('\n=== TESTE payload manual com deferExec:false (v5 format) ===');
+  // 8) Teste com v4 client.postOrder puro (SEM deferExec) — para comparação
+  console.log('\n=== 8) POST /order via v4 client.postOrder (SEM deferExec) ===');
   try {
-    const { buildPolyHmacSignature } = require('@polymarket/clob-client/dist/signing/hmac');
-    const { buildClobEip712Signature } = require('@polymarket/clob-client/dist/signing/eip712');
-
-    // Cria ordem assinada
-    const clientV4 = new ClobClient(CLOB_URL, 137, wallet, creds, 1, proxy);
-    const order = await clientV4.createOrder({
+    const order2 = await client.createOrder({
       tokenID: TOKEN_ID,
-      price: 0.15,
+      price: parseFloat(Math.min(bestAsk + 0.03, 0.99).toFixed(4)),
       size: 1.0,
       side: Side.BUY,
-    }, { negRisk: true });
-
-    // Monta payload no formato v5 (com deferExec) — usando side string e amounts corretos
-    const payload = {
-      deferExec: false,
-      order: {
-        salt: parseInt(order.salt, 10),
-        maker: order.maker,
-        signer: order.signer,
-        taker: order.taker,
-        tokenId: order.tokenId,
-        makerAmount: order.makerAmount,
-        takerAmount: order.takerAmount,
-        side: 'BUY',
-        expiration: order.expiration,
-        nonce: order.nonce,
-        feeRateBps: order.feeRateBps,
-        signatureType: order.signatureType,
-        signature: order.signature,
-      },
-      owner: creds.key,
-      orderType: 'FOK',
-    };
-
-    // Gera L2 headers manualmente
-    const ts = Math.floor(Date.now() / 1000);
-    const body = JSON.stringify(payload);
-    const sig = buildPolyHmacSignature(creds.secret, ts, 'POST', '/order', body);
-    const headers = {
-      'POLY_ADDRESS': wallet.address,
-      'POLY_SIGNATURE': sig,
-      'POLY_TIMESTAMP': `${ts}`,
-      'POLY_API_KEY': creds.key,
-      'POLY_PASSPHRASE': creds.passphrase,
-      'Content-Type': 'application/json',
-      'User-Agent': '@polymarket/clob-client',
-      'Accept': '*/*',
-    };
-
-    console.log('Enviando payload v5 com deferExec:false...');
-    const resp = await axios.post(`${CLOB_URL}/order`, payload, { headers });
-    console.log('✅ Resp:', JSON.stringify(resp.data));
+      feeRateBps,
+    }, { negRisk });
+    const resp2 = await client.postOrder(order2, OrderType.FOK);
+    console.log('✅ v4 postOrder resp:', JSON.stringify(resp2));
   } catch (e) {
-    if (e.response) {
-      console.error('❌ HTTP', e.response.status, JSON.stringify(e.response.data));
-    } else {
-      console.error('❌ Erro:', e.message);
-    }
+    console.error('❌ v4 postOrder:', e.message, JSON.stringify(e.response?.data || ''));
   }
 }
 
-main().catch(e => { console.error('FATAL:', e); process.exit(1); });
+main().catch(e => { console.error('FATAL:', e.message); process.exit(1); });
