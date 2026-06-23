@@ -144,30 +144,24 @@ export async function buyShares(
   }
   try {
     const limitPrice = parseFloat(Math.min(price + slippage, 0.99).toFixed(4));
+    // Detecta negRisk para assinar com contrato correto
+    let negRisk = false;
+    try {
+      const nr = await axios.get(`${config.clobApiUrl}/neg-risk`, { params: { token_id: tokenId }, timeout: 5000 });
+      negRisk = nr.data?.neg_risk === true;
+    } catch { /* assume false */ }
+
     // v4.0.0 API: createOrder (limite) + postOrder (FOK ou GTC)
-    // size = shares (tokens condicionais), price = preço máximo por share
     const order = await client.createOrder({
       tokenID: tokenId,
       price  : limitPrice,
       size   : parseFloat(shares.toFixed(6)),
       side   : Side.BUY,
-    });
+    }, { negRisk });
     const postType = (orderType === OrderType.GTC || orderType === OrderType.GTD)
       ? OrderType.GTC
       : OrderType.FOK;
-    // Log completo do payload que será enviado ao servidor
-    const debugPayload = {
-      salt: (order as any).salt,
-      maker: (order as any).maker,
-      signer: (order as any).signer,
-      tokenId: (order as any).tokenId,
-      makerAmount: (order as any).makerAmount,
-      takerAmount: (order as any).takerAmount,
-      side: (order as any).side,
-      signatureType: (order as any).signatureType,
-      sig: ((order as any).signature || '').slice(0, 20),
-    };
-    console.error(`[API] ORDER payload: ${JSON.stringify(debugPayload)}`);
+    console.error(`[API] ORDER negRisk=${negRisk} sigType=${(order as any).signatureType} maker=${((order as any).maker||'').slice(0,10)}...`);
     const resp = await client.postOrder(order, postType);
     console.error(`[API] ${postType} resp: ${JSON.stringify(resp)}`);
     return (resp as any).orderID ?? (resp as any).order?.id ?? null;
